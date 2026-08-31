@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/monitor-core",
+    "crates/host-collector",
+    "crates/machine-projection",
+    "crates/monitor-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/epi13/mncs-system-monitor"
+rust-version = "1.85"
+
+[workspace.dependencies]
+mncs-monitor-core = { path = "crates/monitor-core" }
+mncs-host-collector = { path = "crates/host-collector" }
+mncs-machine-projection = { path = "crates/machine-projection" }

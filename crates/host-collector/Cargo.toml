@@ -1,0 +1,10 @@
+[package]
+name = "mncs-host-collector"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mncs-monitor-core.workspace = true

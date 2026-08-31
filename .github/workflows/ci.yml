@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  documentation:
+    name: Documentation shape
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required documentation
+        run: |
+          set -euo pipefail
+          for file in README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md \
+            docs/README.md docs/architecture.md docs/semantics.md docs/roadmap.md \
+            docs/contributing.md tui/README.md examples/README.md; do
+            test -s "$file"
+          done
+          grep -Fq 'mncs-tui' README.md
+          grep -Fq 'mncs-language' docs/architecture.md
+          grep -Fq 'UNKNOWN' docs/semantics.md
