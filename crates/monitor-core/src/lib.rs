@@ -5,9 +5,13 @@
 //! host-collector boundary respectively.
 
 mod model;
+mod sampling;
 
 pub use model::{
-    CpuSample, IoSample, MemorySample, NetworkSample, Observation, ObservationSource,
-    ObservationSubject, PressureKind, PressureLevel, Process, ProcessId, ProcessIdentity,
-    ProcessState, ResourcePressure, SystemSnapshot,
+    CollectionIssue, CpuCounters, CpuSample, DiskSample, EventKind, HistorySample, IoSample,
+    MemorySample, MonitorEvent, NetworkSample, Observation, ObservationSource, ObservationStatus,
+    ObservationSubject, ObservationTime, PressureKind, PressureLevel, Process, ProcessHistoryPoint,
+    ProcessId, ProcessIdentity, ProcessLifecycle, ProcessRelationship, ProcessState,
+    ProcessTransition, RelationshipStatus, ResourcePressure, SystemSnapshot,
 };
+pub use sampling::{reconcile_processes, AcceptedSnapshot, Sampler, DEFAULT_HISTORY_CAPACITY};
