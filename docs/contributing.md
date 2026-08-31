@@ -41,7 +41,9 @@ a temporary duplicate authority here and allow it to become permanent by acciden
 For every change:
 
 - run `cargo fmt --all -- --check`;
+- run `cargo clippy --workspace --all-targets -- -D warnings`;
 - run `cargo test --workspace` and `cargo check --workspace --all-targets`;
+- run `cargo run -p mncs-system-monitor -- --json --once` and validate the versioned envelope;
 - inspect the resulting tree and diff;
 - validate documentation links and examples for internal consistency;
 - record unsupported or unresolved checks instead of silently skipping them.

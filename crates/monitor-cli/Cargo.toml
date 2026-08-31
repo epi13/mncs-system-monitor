@@ -12,3 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 mncs-host-collector.workspace = true
+mncs-machine-projection.workspace = true
+mncs-monitor-core.workspace = true
+mncs-tui-host.workspace = true

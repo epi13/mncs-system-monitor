@@ -1,0 +1,22 @@
+mncs 0.8;
+
+// Semantic contract fixture for the human projection. Host I/O and Linux
+// facts stay in Rust; this source consumes reusable mncs-tui geometry and
+// bounded chart authorities rather than reconstructing a string graph.
+module mncs_system_monitor.tui;
+
+use mncs.core.geometry.v1;
+use mncs_tui.charts;
+use mncs_tui.geometry;
+
+fn monitor_view_contract(columns: i64, rows: i64) -> (result: bool) {
+    let window: Rect = Rect { origin: Point { column: 0, row: 0 }, size: Size { columns: columns, rows: rows } };
+    let chart_area: Rect = Rect { origin: Point { column: 0, row: 2 }, size: Size { columns: columns, rows: 1 } };
+    let line: Sparkline = sparkline_make(chart_area, 0, 100, [10, 30, 50, 90], 4);
+    let clipped: Rect = child_clipped_rect(chart_area, window);
+    return rect_contains_rect(window, clipped) && line.count == 4 && sparkline_has_point(line, 3);
+}
+
+fn monitor_view_contract_80x24() -> (result: bool) {
+    return monitor_view_contract(80, 24);
+}

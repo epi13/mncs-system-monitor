@@ -33,8 +33,53 @@ jobs:
       - name: Check workspace
         run: cargo check --workspace --all-targets
 
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Run tests
         run: cargo test --workspace
+
+      - name: Run machine projection smoke test
+        run: cargo run --quiet -p mncs-system-monitor -- --json --once --history 2 > snapshot.json
+
+      - name: Check machine projection shape
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.schema' snapshot.json)" = "mncs.system-monitor.snapshot.v1"
+          test "$(jq -r '.process_count == (.processes | length)' snapshot.json)" = "true"
+          test "$(jq -r '.history | length' snapshot.json)" -ge 1
+
+  tui_source:
+    name: MNCS/TUI source integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout monitor
+        uses: actions/checkout@v4
+
+      - name: Checkout mncs-language
+        uses: actions/checkout@v4
+        with:
+          repository: epi13/mncs-language
+          path: mncs-language
+
+      - name: Checkout mncs-tui
+        uses: actions/checkout@v4
+        with:
+          repository: epi13/mncs-tui
+          path: mncs-tui
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build MNCS CLI
+        run: cargo build --release -p mncs-cli
+        working-directory: mncs-language
+
+      - name: Validate monitor MNCS source contract
+        env:
+          MNCS_LIBRARY_PATH: ${{ github.workspace }}/mncs-language/library:${{ github.workspace }}/mncs-tui/src
+        run: mncs-language/target/release/mncs validate tui/monitor-app.mncs
 
   documentation:
     name: Documentation shape

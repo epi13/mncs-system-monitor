@@ -1,7 +1,14 @@
 # Semantic vocabulary
 
-This document defines the bootstrap vocabulary owned by the monitor. It is a design boundary, not
-a promise that these Rust structs are the final MNCS representation.
+This document defines the currently exercised vocabulary owned by the monitor. It is a Rust
+semantic boundary, not a promise that these structs are the final MNCS representation.
+
+## Evidence statuses
+
+Every source may establish a value, or establish why it did not. observed, unknown, unavailable,
+unsupported, permission_denied, malformed, disappeared, stale, counter_regression, and
+invalid_interval are distinct. A missing /proc/<pid>/io file is not zero I/O; a first sample is
+not a zero rate; and a PID absent from the next enumeration is not evidence of a clean exit.
 
 ## Subjects
 
@@ -18,14 +25,15 @@ two display names look related.
 
 ## Observations
 
-An observation has four parts:
+An observation has a subject, observation time, source, evidence status, and an optional value:
 
 ```text
 Observation<T> {
     subject: Process | Service | Cgroup | Interface | Host,
     observed_at: timestamp,
     source: ProcStat | ProcStatus | Sysfs | Cgroup | Systemd | HostApi | ...,
-    value: T,
+    status: Observed | Unknown | Unavailable | Unsupported | PermissionDenied | Malformed | ...,
+    value: Option<T>,
 }
 ```
 
@@ -40,7 +48,13 @@ manufacture precision.
 - I/O values retain counters or interval-qualified throughput according to what the source
   establishes; a counter is not silently relabeled as a rate.
 - Network samples retain interface identity when available.
-- Pressure records retain a kind, qualitative level, source, and optional time window.
+- Pressure records retain a kind, qualitative level, PSI `some`/`full` averages when Linux exposes
+  them, source, and an optional time window.
+
+The sampler retains at most a configured number of HistorySample values (120 by default). Raw
+counters stay alongside derived values. CPU, disk, network, and process I/O rates require a valid
+monotonic interval and continuity; counter regressions clear the derived rate and retain the
+regression status.
 
 The monitor does not claim that similarly named fields from different operating systems have
 identical semantics. Adapters must document source-specific assumptions and preserve `Unknown`
@@ -52,8 +66,10 @@ PIDs are reusable. `ProcessIdentity` therefore contains the PID and an optional 
 If a source does not expose a start marker, the identity remains weaker and reconciliation must not
 claim continuity across a reuse boundary.
 
-Process start and exit events belong to a future event/reconciliation layer. A process disappearing
-from one snapshot is not, by itself, proof of a clean exit.
+The sampler emits bounded lifecycle transitions and evidence-scoped events for observed starts,
+identity changes, and processes no longer present in the next accepted snapshot. A process
+disappearing from one snapshot is not, by itself, proof of a clean exit. Missing start markers
+produce weaker reconciliation and do not justify a continuity claim.
 
 ## Uncertainty vocabulary
 
