@@ -4,9 +4,10 @@
 
 A machine-native system observability surface with both human and machine projections.
 
-> **Status: experimental bootstrap.** The repository now establishes the monitor's ownership
-> boundaries, Rust workspace, semantic domain model, host-collector seam, and projection seam. It
-> does not yet claim to collect live host data or provide a production-ready terminal application.
+> **Status: experimental runnable vertical slice.** On Linux, the repository collects a bounded
+> `/proc`/`/sys` snapshot, derives interval-qualified values, and exposes the same semantic state
+> through a human terminal view and versioned JSON. APIs and cross-platform behavior remain
+> experimental.
 
 ## Why this project exists
 
@@ -49,7 +50,8 @@ The first intended views are:
 4. **Events and pressure** — starts, exits, crashes, spikes, bursts, limits, and resource pressure
    with source and timing retained.
 
-These are design targets, not current feature claims.
+The Overview and Processes views are exercised today. Graph, service/cgroup discovery, and richer
+event/pressure panes remain intentionally staged.
 
 ## Repository layout
 
@@ -58,9 +60,10 @@ crates/
   monitor-core/          monitor-owned semantic models and observation vocabulary
   host-collector/        OS boundary; platform adapters and explicit collection errors
   machine-projection/    machine-facing view over the shared semantic snapshot
-  monitor-cli/           small executable entry point for the bootstrap
+  monitor-cli/           interactive terminal application and JSON entry point
 tui/
-  README.md              future mncs-tui application boundary
+  README.md              mncs-tui application boundary and source fixture
+  monitor-app.mncs       bounded MNCS geometry/chart integration contract
 docs/
   README.md              documentation map
   architecture.md       pipeline, ownership, and state/effect boundaries
@@ -71,22 +74,25 @@ examples/
   README.md              illustrative fixtures and future host examples
 ```
 
-The Rust crates intentionally use only the standard library at this stage. That keeps the
-boundary and data model reviewable while upstream MNCS and host-integration decisions are still
-open.
+The monitor core remains standard-library oriented. The executable uses the small upstream
+`mncs-tui-host` realization for Unix terminal lifecycle, input, resize, structured frames, and
+diffed output; it does not copy terminal or ANSI semantics into this repository.
 
 ## Quick start
 
 ```bash
 cargo test --workspace
-cargo run -p mncs-system-monitor
+cargo clippy --workspace --all-targets -- -D warnings
+cargo run -p mncs-system-monitor -- --once
+cargo run -p mncs-system-monitor -- --json --once
 ```
 
-The executable currently reports that live collection is unresolved. That is expected for the
-bootstrap: unsupported collection is represented as an explicit outcome rather than an empty or
-invented snapshot.
+The default command enters the interactive TUI when stdout is a terminal. Use `--no-tui` for a
+concise human snapshot, `--json` for the machine projection, `--interval-ms N` to set the sampling
+interval, and `--history N` to bound retained history. The first sample intentionally reports
+CPU/rate fields as warming when no valid counter interval exists.
 
-For the future MNCS/TUI source path, keep sibling checkouts of this repository and
+For the MNCS/TUI source path, keep sibling checkouts of this repository and
 [`mncs-tui`](https://github.com/epi13/mncs-tui), then follow the integration notes in
 [`tui/README.md`](tui/README.md). The monitor should consume TUI geometry, widgets, events, and
 terminal projection from that project rather than copying them here.
@@ -112,14 +118,14 @@ See the [architecture](docs/architecture.md), [semantic vocabulary](docs/semanti
 `PASS`, `FAIL`, or `UNKNOWN`; missing host privileges, unsupported platforms, unavailable sensors,
 and unimplemented adapters remain `UNKNOWN`.
 
-## Non-goals for the bootstrap
+## Current boundaries and non-goals
 
-This first milestone does not promise:
+This vertical slice does not promise:
 
-- a stable public API or wire format;
-- a complete Linux, BSD, macOS, or Windows collector;
+- a stable public API or wire format beyond the explicitly versioned experimental JSON envelope;
+- a complete BSD, macOS, or Windows collector;
 - root privileges, namespace traversal, cgroup discovery, or systemd integration;
-- a production-grade sampling scheduler or history store;
+- a production-grade scheduler, persistence layer, or event delivery guarantee;
 - a terminal emulator or a second TUI framework;
 - agent access by scraping human-oriented terminal output;
 - proof, certification, or universal accuracy from bounded local experiments.

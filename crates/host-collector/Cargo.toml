@@ -8,3 +8,4 @@ rust-version.workspace = true
 
 [dependencies]
 mncs-monitor-core.workspace = true
+libc = "0.2"

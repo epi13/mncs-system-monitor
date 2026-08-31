@@ -13,7 +13,9 @@ use mncs_monitor_core::{ObservationSource, SystemSnapshot};
 mod platform;
 
 #[cfg(target_os = "linux")]
-pub use platform::PlatformCollector;
+pub use platform::{
+    parse_proc_stat_cpu, parse_process_stat, LinuxPaths, ParsedProcessStat, PlatformCollector,
+};
 
 #[cfg(not(target_os = "linux"))]
 mod unsupported;
@@ -34,6 +36,7 @@ pub enum CollectError {
     PermissionDenied { resource: String },
     Unavailable { resource: String },
     Malformed { resource: String },
+    Io { resource: String, detail: String },
 }
 
 impl Display for CollectError {
@@ -50,6 +53,9 @@ impl Display for CollectError {
             }
             Self::Malformed { resource } => {
                 write!(formatter, "host resource is malformed: {resource}")
+            }
+            Self::Io { resource, detail } => {
+                write!(formatter, "I/O error while reading {resource}: {detail}")
             }
         }
     }

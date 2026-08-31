@@ -76,8 +76,9 @@ The monitor model retains the facts that are commonly lost in a string-first mon
 - unsupported, unavailable, malformed, and permission-limited facts remain distinguishable;
 - missing values remain missing instead of becoming zeroes or plausible defaults.
 
-The model is intentionally point-in-time. Bounded history, deltas, rates, and windows belong in a
-later sampling layer with explicit retention and freshness rules.
+The sampler now adds bounded history, deltas, rates, lifecycle reconciliation, and evidence-scoped
+events around each accepted point-in-time snapshot. Retention is explicit: history is capped by
+configuration and process history is capped per sample.
 
 ## Collection boundary
 
@@ -90,14 +91,18 @@ follow this sequence:
 4. translate into `mncs-monitor-core` subjects;
 5. report unsupported, unavailable, malformed, or permission-limited results explicitly.
 
-The bootstrap Linux adapter stops before step one and returns `UNKNOWN`. This is deliberate: an
-empty process list would falsely imply a successful observation.
+The Linux adapter now implements the /proc boundary with a /sys CPU-online fallback. Process
+directory enumeration is only a candidate set: each process is re-read and may disappear before
+its stat/status/I/O files are read. Such failures are recorded as issues, not converted to rows
+with invented zeros. Permission, unavailable, malformed, and counter-regression statuses remain
+visible in the semantic snapshot.
 
 ## Projection boundary
 
-The machine projection currently borrows `SystemSnapshot` and names a versioned schema envelope.
-It does not yet choose JSON, MessagePack, MCP, or another transport. A future transport must
-preserve provenance and uncertainty and must not turn the human TUI into an implicit API.
+The machine projection borrows SystemSnapshot and emits the versioned
+mncs.system-monitor.snapshot.v1 JSON envelope. It includes identity, raw counters, qualified
+rates, source/status, timing, relationships, transitions, bounded history, events, and collection
+issues. The TUI and JSON projection receive the same accepted snapshot; neither scrapes the other.
 
 The TUI should follow the existing `mncs-tui` pipeline:
 
@@ -116,8 +121,8 @@ The intended monitor loop is:
 3. reconcile process identities and relationships;
 4. derive bounded deltas, rates, and pressure signals when inputs are sufficient;
 5. publish a new accepted snapshot to both projections;
-6. let `mncs-tui` resolve and render the human view;
-7. expose the same accepted snapshot through a machine-facing adapter.
+6. let the mncs-tui host realization write the human frame;
+7. expose the same accepted snapshot through the JSON machine-facing adapter.
 
 Host reads, timers, process inspection, sockets, systemd access, and terminal I/O are effects. They
 should remain at their declared boundaries with authority, failure behavior, and cleanup visible.
@@ -140,7 +145,8 @@ These are candidate obligations for the bootstrap, not production certification 
 ## Open questions
 
 - Which process/service/cgroup relationship vocabulary should remain monitor-specific?
-- What is the smallest bounded history representation for rates and deltas?
+- What is the smallest bounded history representation for rates and deltas? The current sampler
+  retains up to 120 samples and up to 512 process points per sample.
 - How should namespace boundaries and containers affect identity and visibility?
 - Which Linux facts require elevated privileges, and how should partial views be represented?
 - Should pressure use a monitor-level qualitative vocabulary or preserve source-native detail?

@@ -18,3 +18,4 @@ rust-version = "1.85"
 mncs-monitor-core = { path = "crates/monitor-core" }
 mncs-host-collector = { path = "crates/host-collector" }
 mncs-machine-projection = { path = "crates/machine-projection" }
+mncs-tui-host = { git = "https://github.com/epi13/mncs-tui.git", rev = "0c6454c" }

@@ -5,16 +5,16 @@ capability is complete or production-ready.
 
 ## Phase 0 — Repository bootstrap
 
-**Status: scaffolded.**
+**Status: complete and superseded by the exercised phases below.**
 
 - establish a Rust workspace for monitor core, host collection, machine projection, and CLI;
 - define process/resource subjects, provenance, timing, and explicit uncertainty;
 - document ownership with `mncs-tui`, `mncs-language`, and `mncs-language-service`;
-- keep the executable honest by reporting collection as `UNKNOWN` until a real adapter exists.
+- keep the executable honest by making unsupported and incomplete collection explicit.
 
 ## Phase 1 — Linux host facts
 
-**Status: planned.**
+**Status: exercised.**
 
 - add bounded, fixture-driven `/proc` parsing for process identity, state, CPU, memory, threads,
   and I/O;
@@ -24,7 +24,7 @@ capability is complete or production-ready.
 
 ## Phase 2 — Sampling and reconciliation
 
-**Status: planned.**
+**Status: exercised.**
 
 - add a bounded sampling scheduler and retention policy;
 - derive rates and deltas only when counter continuity and intervals are established;
@@ -33,7 +33,7 @@ capability is complete or production-ready.
 
 ## Phase 3 — First human projection
 
-**Status: planned.**
+**Status: experimental and runnable.**
 
 - build the Overview and Processes views as a separate `mncs-tui` application layer;
 - consume `mncs-tui` layout, table, focus, event, frame, and terminal contracts;
@@ -42,7 +42,7 @@ capability is complete or production-ready.
 
 ## Phase 4 — Machine projection
 
-**Status: scaffolded as a seam; transport planned.**
+**Status: exercised with versioned JSON.**
 
 - choose a versioned local transport and serialization format;
 - expose snapshots, process inspection, filters, and bounded history to agents;
@@ -51,7 +51,7 @@ capability is complete or production-ready.
 
 ## Phase 5 — Relationships, pressure, and events
 
-**Status: planned.**
+**Status: experimental.**
 
 - add typed process/service/cgroup graph views;
 - add memory, I/O, CPU, and file-descriptor pressure signals;
@@ -60,7 +60,9 @@ capability is complete or production-ready.
 
 ## Phase 6 — Platform and MNCS feedback
 
-**Status: deferred.**
+**Status: deferred where it requires new language/runtime effects. The genuine reusable TUI
+host-realization gap and bounded sparkline need were implemented upstream in mncs-tui; no
+language-service change was required by this vertical slice.**
 
 - add other platform adapters only after the Linux boundary is testable;
 - identify reusable time, provenance, bounded-series, rate, and delta primitives;
