@@ -1,2 +1,127 @@
 # mncs-system-monitor
+
+[![CI](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml)
+
 A machine-native system observability surface with both human and machine projections.
+
+> **Status: experimental bootstrap.** The repository now establishes the monitor's ownership
+> boundaries, Rust workspace, semantic domain model, host-collector seam, and projection seam. It
+> does not yet claim to collect live host data or provide a production-ready terminal application.
+
+## Why this project exists
+
+`mncs-system-monitor` is a companion project to [`mncs-tui`](https://github.com/epi13/mncs-tui),
+not a replacement for it and not a new home for generic terminal semantics. The monitor explores a
+different vertical slice:
+
+```text
+Linux / host facts
+      ↓
+Rust host collector boundary
+      ↓
+typed monitor observations and relationships
+      ↓
+┌──────────────────────┬──────────────────────┐
+│ human projection      │ machine projection   │
+│ mncs-tui application  │ structured API/data  │
+└──────────────────────┴──────────────────────┘
+```
+
+The same structured state should serve a person inspecting a busy process and an agent asking for
+the processes consuming memory. Neither projection should need to scrape the other.
+
+## Initial design
+
+The monitor owns its domain vocabulary: processes, process identity, resource samples, process
+relationships, pressure signals, sampling policy, and monitor-specific uncertainty. The host
+adapter owns OS interaction. `mncs-tui` owns layout, widgets, focus, rendering, and terminal
+interaction. `mncs-language` remains the authority for language, type, effect, identity, and
+verification semantics.
+
+The first intended views are:
+
+1. **Overview** — CPU, memory, swap, load, uptime, process count, disk I/O, network throughput,
+   and compact history.
+2. **Processes** — a sortable and filterable process table with PID identity, parent, CPU, memory,
+   threads, state, executable, user, start marker, and I/O.
+3. **Process graph** — typed relationships between processes, services, and cgroups rather than
+   indentation reconstructed from text.
+4. **Events and pressure** — starts, exits, crashes, spikes, bursts, limits, and resource pressure
+   with source and timing retained.
+
+These are design targets, not current feature claims.
+
+## Repository layout
+
+```text
+crates/
+  monitor-core/          monitor-owned semantic models and observation vocabulary
+  host-collector/        OS boundary; platform adapters and explicit collection errors
+  machine-projection/    machine-facing view over the shared semantic snapshot
+  monitor-cli/           small executable entry point for the bootstrap
+tui/
+  README.md              future mncs-tui application boundary
+docs/
+  README.md              documentation map
+  architecture.md       pipeline, ownership, and state/effect boundaries
+  semantics.md          monitor vocabulary and observation contracts
+  roadmap.md            staged implementation plan and non-goals
+  contributing.md        change and evidence expectations
+examples/
+  README.md              illustrative fixtures and future host examples
+```
+
+The Rust crates intentionally use only the standard library at this stage. That keeps the
+boundary and data model reviewable while upstream MNCS and host-integration decisions are still
+open.
+
+## Quick start
+
+```bash
+cargo test --workspace
+cargo run -p mncs-system-monitor
+```
+
+The executable currently reports that live collection is unresolved. That is expected for the
+bootstrap: unsupported collection is represented as an explicit outcome rather than an empty or
+invented snapshot.
+
+For the future MNCS/TUI source path, keep sibling checkouts of this repository and
+[`mncs-tui`](https://github.com/epi13/mncs-tui), then follow the integration notes in
+[`tui/README.md`](tui/README.md). The monitor should consume TUI geometry, widgets, events, and
+terminal projection from that project rather than copying them here.
+
+## Relationship to the MNCS family
+
+- **`mncs-system-monitor`** owns host-observability subjects and their projections.
+- **`mncs-tui`** owns panes, tables, lists, charts when upstreamed, focus, layout, rendering, and
+  terminal interaction.
+- **`mncs-language`** owns language semantics, generic identity/effect/verification primitives,
+  and compiler/lowering contracts.
+- **`mncs-language-service`** owns resident analysis, diagnostics, navigation, and agent/editor
+  context for the source.
+
+When this project discovers a reusable primitive—such as bounded time series, rates, deltas, or
+provenance—it should record the pressure and propose it upstream. It should not create a competing
+generic ontology just because the monitor needs the concept first.
+
+## Development status
+
+See the [architecture](docs/architecture.md), [semantic vocabulary](docs/semantics.md), and
+[roadmap](docs/roadmap.md) before adding an implementation. In particular, a result may be
+`PASS`, `FAIL`, or `UNKNOWN`; missing host privileges, unsupported platforms, unavailable sensors,
+and unimplemented adapters remain `UNKNOWN`.
+
+## Non-goals for the bootstrap
+
+This first milestone does not promise:
+
+- a stable public API or wire format;
+- a complete Linux, BSD, macOS, or Windows collector;
+- root privileges, namespace traversal, cgroup discovery, or systemd integration;
+- a production-grade sampling scheduler or history store;
+- a terminal emulator or a second TUI framework;
+- agent access by scraping human-oriented terminal output;
+- proof, certification, or universal accuracy from bounded local experiments.
+
+Licensed under Apache-2.0. See [LICENSE](LICENSE).
