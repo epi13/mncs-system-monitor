@@ -58,6 +58,21 @@ capability is complete or production-ready.
 - add starts, exits, crashes, spikes, bursts, and limit events with evidence boundaries;
 - make event loss, sampling gaps, and clock assumptions visible.
 
+## Phase 7 — Canonical execution correlation
+
+**Status: exercised.**
+
+- ingest Forge-shaped execution records and `mncs.test-result/1` outcome envelopes without
+  authoring execution state;
+- link records to live processes by PID plus start marker only (no substring/path/name
+  heuristics); withhold linkage on PID reuse;
+- detect stale-active, lingering, envelope-exceeded, saturation-with-unknown, and
+  watched-orphan conditions with explanatory detail;
+- reconcile retained records after restart without resurrecting terminal state or resolving
+  UNKNOWN;
+- project versioned `correlation` and `restart` sections for TUI/Atlas/agent consumers;
+- keep history bounded and in-memory; keep no operational database.
+
 ## Phase 6 — Platform and MNCS feedback
 
 **Status: deferred where it requires new language/runtime effects. The genuine reusable TUI

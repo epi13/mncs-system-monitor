@@ -3,6 +3,7 @@ members = [
     "crates/monitor-core",
     "crates/host-collector",
     "crates/machine-projection",
+    "crates/execution-correlation",
     "crates/monitor-cli",
 ]
 resolver = "2"
@@ -18,4 +19,5 @@ rust-version = "1.85"
 mncs-monitor-core = { path = "crates/monitor-core" }
 mncs-host-collector = { path = "crates/host-collector" }
 mncs-machine-projection = { path = "crates/machine-projection" }
+mncs-execution-correlation = { path = "crates/execution-correlation" }
 mncs-tui-host = { git = "https://github.com/epi13/mncs-tui.git", rev = "0c6454c" }

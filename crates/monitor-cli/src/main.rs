@@ -1,6 +1,11 @@
 use std::cmp::Ordering;
 use std::time::Duration;
 
+use mncs_execution_correlation::{
+    correlate, correlation_report_value, execution_records_from_json,
+    execution_records_from_test_result, reconcile_after_restart, restart_report_value,
+    CorrelationReport, ExecutionRecord, HostSaturation,
+};
 use mncs_host_collector::{Collector, PlatformCollector};
 use mncs_machine_projection::StructuredProjection;
 use mncs_monitor_core::{Process, ProcessIdentity, ProcessState, Sampler, SystemSnapshot};
@@ -8,6 +13,7 @@ use mncs_tui_host::{Cell, Color, Event, Frame, Key, Size, Style, TerminalSession
 
 const DEFAULT_INTERVAL_MS: u64 = 1_000;
 const DEFAULT_HISTORY: usize = 120;
+const TEST_RESULT_SCHEMA_VERSION: &str = "mncs.test-result/1";
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -16,6 +22,9 @@ struct Config {
     json: bool,
     once: bool,
     no_tui: bool,
+    executions: Option<String>,
+    watch_executables: Vec<String>,
+    reconcile: Option<String>,
 }
 
 impl Default for Config {
@@ -26,6 +35,9 @@ impl Default for Config {
             json: false,
             once: false,
             no_tui: false,
+            executions: None,
+            watch_executables: Vec::new(),
+            reconcile: None,
         }
     }
 }
@@ -38,7 +50,9 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let result = if config.json {
+    let result = if config.reconcile.is_some() {
+        run_reconcile(config)
+    } else if config.json {
         run_machine(config)
     } else {
         run_human(config)
@@ -84,6 +98,29 @@ where
                 }
                 config.history_capacity = capacity;
             }
+            "--executions" => {
+                let value = args
+                    .next()
+                    .ok_or("--executions needs a records file path")?;
+                if value.is_empty() {
+                    return Err("--executions needs a records file path".into());
+                }
+                config.executions = Some(value);
+            }
+            "--watch-exe" => {
+                let value = args.next().ok_or("--watch-exe needs an executable name")?;
+                if value.is_empty() {
+                    return Err("--watch-exe needs an executable name".into());
+                }
+                config.watch_executables.push(value);
+            }
+            "--reconcile" => {
+                let value = args.next().ok_or("--reconcile needs a records file path")?;
+                if value.is_empty() {
+                    return Err("--reconcile needs a records file path".into());
+                }
+                config.reconcile = Some(value);
+            }
             "-h" | "--help" => {
                 println!("{}", usage());
                 std::process::exit(0);
@@ -95,19 +132,78 @@ where
 }
 
 fn usage() -> &'static str {
-    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--interval-ms N] [--history N]\n\n\
+    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--interval-ms N] [--history N]\n                         [--executions FILE] [--watch-exe NAME]... [--reconcile FILE]\n\n\
 Default mode is an interactive TUI when stdout is a terminal and a concise snapshot otherwise.\n\
---json emits the semantic snapshot envelope, including evidence status and bounded history."
+--json emits the semantic snapshot envelope, including evidence status and bounded history.\n\
+--executions correlates the snapshot against ingested canonical execution records (the\n\
+monitor's own record envelope, or a mncs.test-result/1 envelope) and merges a `correlation`\n\
+section into --json output.\n\
+--watch-exe names an executable to flag when it runs with no linked Active execution; repeat\n\
+for several names. --reconcile prints a restart-reconciliation report for FILE and exits."
+}
+
+/// Load canonical execution records. A `mncs.test-result/1` envelope is ingested for its
+/// outcome section; anything else goes through the monitor's record envelope. A malformed
+/// records file is a configuration error (nonzero exit), never silent UNKNOWN telemetry.
+fn load_execution_records(path: &str) -> Result<Vec<ExecutionRecord>, Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(path)?;
+    let marker: serde_json::Value = serde_json::from_str(&text)?;
+    let is_test_result = marker
+        .get("schema_version")
+        .and_then(serde_json::Value::as_str)
+        == Some(TEST_RESULT_SCHEMA_VERSION);
+    if is_test_result {
+        Ok(execution_records_from_test_result(&text)?)
+    } else {
+        Ok(execution_records_from_json(&text)?)
+    }
+}
+
+/// Restart/interruption reconciliation: classify retained records against one fresh snapshot
+/// and emit the versioned restart section. Exit status stays zero while the report itself is
+/// produced; the classifications inside carry any staleness.
+fn run_reconcile(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    let path = config
+        .reconcile
+        .as_deref()
+        .ok_or("reconcile mode needs a records file")?;
+    let records = load_execution_records(path)?;
+    let mut collector = PlatformCollector::new();
+    let mut sampler = Sampler::new(1);
+    let snapshot = sampler.accept(collector.collect()?).snapshot;
+    let report = reconcile_after_restart(&records, &snapshot);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&restart_report_value(&report))?
+    );
+    Ok(())
 }
 
 fn run_machine(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut collector = PlatformCollector::new();
     let mut sampler = Sampler::new(config.history_capacity);
     let projection = StructuredProjection;
+    let records = match config.executions.as_deref() {
+        Some(path) => load_execution_records(path)?,
+        None => Vec::new(),
+    };
+    let correlated = !records.is_empty() || !config.watch_executables.is_empty();
     loop {
         let raw = collector.collect()?;
         let snapshot = sampler.accept(raw).snapshot;
-        println!("{}", projection.json(&snapshot)?);
+        if correlated {
+            let saturation = HostSaturation::from_snapshot(&snapshot);
+            let report = correlate(&records, &snapshot, &config.watch_executables, saturation);
+            println!(
+                "{}",
+                projection.json_with(
+                    &snapshot,
+                    &[("correlation", correlation_report_value(&report))]
+                )?
+            );
+        } else {
+            println!("{}", projection.json(&snapshot)?);
+        }
         if config.once {
             return Ok(());
         }
@@ -120,14 +216,36 @@ fn run_human(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut sampler = Sampler::new(config.history_capacity);
     let first = sampler.accept(collector.collect()?).snapshot;
     if config.once || config.no_tui {
-        print_summary(&first);
+        let correlation = match config.executions.as_deref() {
+            Some(path) => {
+                let records = load_execution_records(path)?;
+                let saturation = HostSaturation::from_snapshot(&first);
+                Some(correlate(
+                    &records,
+                    &first,
+                    &config.watch_executables,
+                    saturation,
+                ))
+            }
+            None if !config.watch_executables.is_empty() => {
+                let saturation = HostSaturation::from_snapshot(&first);
+                Some(correlate(
+                    &[],
+                    &first,
+                    &config.watch_executables,
+                    saturation,
+                ))
+            }
+            None => None,
+        };
+        print_summary(&first, correlation.as_ref());
         return Ok(());
     }
 
     let mut terminal = match TerminalSession::enter() {
         Ok(terminal) => terminal,
         Err(_) => {
-            print_summary(&first);
+            print_summary(&first, None);
             return Ok(());
         }
     };
@@ -872,7 +990,7 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
-fn print_summary(snapshot: &SystemSnapshot) {
+fn print_summary(snapshot: &SystemSnapshot, correlation: Option<&CorrelationReport>) {
     println!("mncs-system-monitor");
     println!(
         "host: {}",
@@ -943,5 +1061,24 @@ fn print_summary(snapshot: &SystemSnapshot) {
             "issues: {} (see --json for evidence details)",
             snapshot.issues.len()
         );
+    }
+    if let Some(report) = correlation {
+        let linked = report
+            .links
+            .iter()
+            .filter(|link| link.process.is_some())
+            .count();
+        println!(
+            "executions: {} linked: {} anomalies: {}",
+            report.links.len(),
+            linked,
+            report.anomalies.len()
+        );
+        for anomaly in report.anomalies.iter().take(5) {
+            println!("anomaly: {}", anomaly.detail);
+        }
+        if report.anomalies.len() > 5 {
+            println!("anomaly: ... ({} more)", report.anomalies.len() - 5);
+        }
     }
 }

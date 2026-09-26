@@ -49,6 +49,25 @@ jobs:
           test "$(jq -r '.process_count == (.processes | length)' snapshot.json)" = "true"
           test "$(jq -r '.history | length' snapshot.json)" -ge 1
 
+      - name: Run correlation smoke test
+        run: cargo run --quiet -p mncs-system-monitor -- --json --once --history 1 --executions examples/executions-sample.json > correlated.json
+
+      - name: Check correlation shape
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.correlation.schema' correlated.json)" = "mncs.system-monitor.correlation.v1"
+          test "$(jq -r '.correlation.executions' correlated.json)" = "3"
+          test "$(jq -r '.correlation.links | length' correlated.json)" = "3"
+
+      - name: Run reconcile smoke test
+        run: cargo run --quiet -p mncs-system-monitor -- --reconcile examples/executions-sample.json > restart.json
+
+      - name: Check reconcile shape
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.schema' restart.json)" = "mncs.system-monitor.restart.v1"
+          test "$(jq -r '.items | length' restart.json)" = "3"
+
   tui_source:
     name: MNCS/TUI source integration
     runs-on: ubuntu-latest

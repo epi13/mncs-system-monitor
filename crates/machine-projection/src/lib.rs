@@ -66,6 +66,19 @@ impl MachineView<'_> {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(&snapshot_value(self.schema, self.snapshot))
     }
+
+    /// Emit the snapshot envelope with extra top-level sections merged in. Sections are
+    /// caller-supplied projections (for example execution correlation); the snapshot fields
+    /// themselves are never altered by a section.
+    pub fn to_json_with(&self, sections: &[(&str, Value)]) -> Result<String, serde_json::Error> {
+        let mut value = snapshot_value(self.schema, self.snapshot);
+        if let Value::Object(ref mut map) = value {
+            for (name, section) in sections {
+                map.insert((*name).to_string(), section.clone());
+            }
+        }
+        serde_json::to_string_pretty(&value)
+    }
 }
 
 /// Projection contract used by a local API, agent protocol, or export format.
@@ -79,6 +92,14 @@ pub struct StructuredProjection;
 impl StructuredProjection {
     pub fn json(&self, snapshot: &SystemSnapshot) -> Result<String, serde_json::Error> {
         self.project(snapshot).to_json()
+    }
+
+    pub fn json_with(
+        &self,
+        snapshot: &SystemSnapshot,
+        sections: &[(&str, Value)],
+    ) -> Result<String, serde_json::Error> {
+        self.project(snapshot).to_json_with(sections)
     }
 }
 

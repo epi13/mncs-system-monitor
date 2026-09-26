@@ -21,22 +21,30 @@ not freeze a production API.
 └──────────┬─────────┘
            │ normalized monitor subjects
            ▼
-┌────────────────────┐
-│ semantic snapshot   │  processes, resources, relationships, provenance
+┌────────────────────┐     ┌─────────────────────────────────┐
+│ semantic snapshot   │◄────│ canonical execution records     │  Forge receipts/observations,
+│ processes, resources│     │ (ingested, never authored)      │  mncs.test-result/1 envelopes,
+│ relationships,      │     └─────────────────────────────────┘  explicitly authored files
+│ provenance          │
 └──────────┬─────────┘
            │ shared state, never rendered text
        ┌───┴────────────────┐
        ▼                    ▼
 ┌───────────────┐   ┌────────────────────┐
 │ human view     │   │ machine projection │
-│ mncs-tui       │   │ structured data   │
-└──────┬────────┘   └──────────┬─────────┘
-       ▼                       ▼
- terminal                local API / agent
+│ mncs-tui       │   │ structured data +  │
+└──────┬────────┘   │ `correlation` and  │
+       ▼            │ `restart` sections │
+ terminal           └──────────┬─────────┘
+                               ▼
+                        local API / agent
 ```
 
 The shared snapshot is the architectural center. A TUI frame and a machine response are different
-projections of that state, not serialization stages in a human-output pipeline.
+projections of that state, not serialization stages in a human-output pipeline. Correlation
+against canonical execution records is a projection over two inputs — the live snapshot and
+ingested records — computed by `mncs-execution-correlation`, which owns no execution, policy,
+or diagnostic authority of its own.
 
 ## Workspace ownership
 
@@ -59,7 +67,36 @@ mncs-language
 
 mncs-language-service
   owns resident source analysis, diagnostics, navigation, context, and editor/agent adaptation
+
+mncs-execution-correlation
+  owns NOTHING authoritative: it projects ingested canonical execution records against the
+  live snapshot (linkage, anomalies, restart reconciliation) and emits versioned sections
 ```
+
+## Canonical-subsystem boundaries
+
+The monitor observes; the following systems own. The monitor consumes their state and never
+re-implements their decisions:
+
+- **Forge** owns execution, admission, resource envelopes, cancellation, verification state,
+  and execution history. The monitor ingests execution records (receipts, observations,
+  `mncs.test-result/1` outcome envelopes) and compares observed resource use against the
+  admitted envelope from the record. It never decides whether execution is allowed, never
+  kills or cancels processes, and never redefines envelope policy.
+- **Store** owns the persistent substrate. The monitor keeps no operational database: history
+  is bounded and in-memory, and execution history lives in the owning subsystem's record
+  store. Retained records are passed in by the caller (`--executions`, `--reconcile`).
+- **Commons** owns typed project relationships and evidence coordination. Record fields
+  (`repository`, `revision`, `verification_identity`) are opaque strings carried through,
+  never parsed or re-derived by the monitor.
+- **Atlas** owns derived family topology. The monitor reports executable names and PIDs; it
+  never reconstructs the project family.
+- **Debug** owns diagnosis. An anomaly may carry an `evidence_path` pointing at retained
+  evidence for Debug to consume; the monitor performs no diagnosis itself.
+- **Doctor** owns repository conformance. Doctor checks the monitor's contracts and wiring;
+  the monitor is not a live resource policer for Doctor.
+- **TUI** (`mncs-tui`, read-only for this family) owns presentation. Correlation sections
+  are presentation-neutral JSON that a TUI or Atlas summary may consume later.
 
 The Rust crates at the root of this repository are host/application code, not an attempt to
 reimplement the MNCS language in Rust. The future `tui/` source should consume `mncs-tui`'s

@@ -82,6 +82,32 @@ The project follows the MNCS-family distinction between known outcomes and missi
 At the data boundary, `Unknown` enum values and `Option<T>` fields carry local uncertainty. They
 must not be collapsed into normal values merely to make a table or API easier to consume.
 
+## Canonical execution correlation
+
+Host telemetry answers "what is the machine doing". Records ingested from canonical
+subsystems answer "what MNCS believes it started, admitted, and concluded". Correlation
+relates the two without merging them:
+
+- **Execution identity** (`forge:run:…`, `mncs-test:<run_id>`, …) is opaque. The monitor
+  carries it, links against it, and reports it; it never parses inside it.
+- **Linkage tiers**: `linked` (PID plus start marker match exactly), `process_absent`
+  (declared PID gone), `pid_reused` (PID alive under a different marker — linkage withheld,
+  never guessed), `no_pid_declared` (record carries no host hint), `linkage_unknown`.
+  Command-line substrings, paths, names, and timestamps are never linkage evidence.
+- **Anomalies** (`stale_active_execution`, `lingering_process`, `pid_reused`,
+  `envelope_exceeded`, `saturation_with_unknown`, `watched_orphan`) each explain why they
+  matter in `detail`. `envelope_exceeded` compares observed use against the envelope from
+  the record — the monitor holds no thresholds of its own. Saturation context comes from
+  observed PSI `Full` pressure levels, never from invented limits.
+- **UNKNOWN preservation**: `saturation_with_unknown` explains an existing UNKNOWN; it never
+  converts operational incompleteness into a semantic failure. Restart reconciliation
+  classifies (`active_linked`, `stale_active`, `lingering`, `pid_ambiguous`,
+  `completed_observed`, `linkage_unknown`) without resurrecting terminal records or resolving
+  UNKNOWN.
+- **Restart/recovery**: `--reconcile FILE` classifies retained records against one fresh
+  snapshot. Stale-active means host loss or stale canonical state; the outcome stays UNKNOWN
+  either way.
+
 ## Ownership test
 
 Before adding a type, ask:
@@ -93,5 +119,8 @@ Before adding a type, ask:
    language pressure and consider `mncs-language`.
 4. Is it about source diagnostics, navigation, or agent/editor context? Consider
    `mncs-language-service`.
+5. Is it about execution admission, envelopes, cancellation, or verification outcomes? Consume
+   Forge/Store records; do not model policy here.
+6. Is it about diagnosing WHY something failed? Link evidence for Debug; do not diagnose here.
 
 The goal is a clear vertical slice, not a second shared platform hidden inside the monitor.

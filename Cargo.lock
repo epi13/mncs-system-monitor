@@ -21,6 +21,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "mncs-execution-correlation"
+version = "0.1.0"
+dependencies = [
+ "mncs-monitor-core",
+ "serde_json",
+]
+
+[[package]]
 name = "mncs-host-collector"
 version = "0.1.0"
 dependencies = [
@@ -44,10 +52,12 @@ version = "0.1.0"
 name = "mncs-system-monitor"
 version = "0.1.0"
 dependencies = [
+ "mncs-execution-correlation",
  "mncs-host-collector",
  "mncs-machine-projection",
  "mncs-monitor-core",
  "mncs-tui-host",
+ "serde_json",
 ]
 
 [[package]]

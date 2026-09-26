@@ -85,12 +85,33 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p mncs-system-monitor -- --once
 cargo run -p mncs-system-monitor -- --json --once
+cargo run -p mncs-system-monitor -- --json --once --executions examples/executions-sample.json
+cargo run -p mncs-system-monitor -- --reconcile examples/executions-sample.json
 ```
 
 The default command enters the interactive TUI when stdout is a terminal. Use `--no-tui` for a
 concise human snapshot, `--json` for the machine projection, `--interval-ms N` to set the sampling
 interval, and `--history N` to bound retained history. The first sample intentionally reports
 CPU/rate fields as warming when no valid counter interval exists.
+
+## Canonical execution correlation
+
+Host telemetry alone cannot tell a Forge execution from a stray process. `--executions FILE`
+ingests canonical execution records — the monitor's own `execution-record.v1` envelope (see
+`examples/executions-sample.json`) or a `mncs.test-result/1` envelope, whose outcome section
+is read without reinterpretation — and merges a versioned `correlation` section into `--json`
+output: per-record linkage (`linked`, `process_absent`, `pid_reused`, `no_pid_declared`),
+anomalies with explanatory detail (`stale_active_execution`, `lingering_process`,
+`envelope_exceeded`, `saturation_with_unknown`, `watched_orphan`), and stable counts.
+`--watch-exe NAME` (repeatable) flags a watched executable running with no linked Active
+execution. `--reconcile FILE` classifies retained records against one fresh snapshot after a
+restart without resurrecting terminal state or resolving UNKNOWN.
+
+Linkage is PID plus start marker, exactly or not at all: no command-line, path, name, or
+timestamp heuristics. Resource comparisons use the admitted envelope carried by the record;
+the monitor holds no thresholds of its own, never kills or cancels anything, and never
+converts an operational UNKNOWN into a semantic failure. Malformed records files fail loudly
+at startup rather than degrading into silent UNKNOWN telemetry.
 
 For the MNCS/TUI source path, keep sibling checkouts of this repository and
 [`mncs-tui`](https://github.com/epi13/mncs-tui), then follow the integration notes in
@@ -99,13 +120,21 @@ terminal projection from that project rather than copying them here.
 
 ## Relationship to the MNCS family
 
-- **`mncs-system-monitor`** owns host-observability subjects and their projections.
+- **`mncs-system-monitor`** owns host-observability subjects, their projections, and the
+  correlation of live host state against ingested canonical execution records.
 - **`mncs-tui`** owns panes, tables, lists, charts when upstreamed, focus, layout, rendering, and
   terminal interaction.
 - **`mncs-language`** owns language semantics, generic identity/effect/verification primitives,
   and compiler/lowering contracts.
 - **`mncs-language-service`** owns resident analysis, diagnostics, navigation, and agent/editor
   context for the source.
+- **Forge** owns execution, admission, resource envelopes, cancellation, and verification state;
+  the monitor ingests records and never decides policy.
+- **Store** owns persistent substrate; the monitor keeps bounded in-memory history and no
+  operational database.
+- **Commons/Atlas** own typed relationships and family topology; record identity fields are
+  opaque strings here.
+- **Debug** owns diagnosis; anomalies link evidence (`evidence_path`) for Debug to consume.
 
 When this project discovers a reusable primitive—such as bounded time series, rates, deltas, or
 provenance—it should record the pressure and propose it upstream. It should not create a competing

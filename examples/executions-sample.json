@@ -1,0 +1,33 @@
+[
+  {
+    "schema": "mncs.system-monitor.execution-record.v1",
+    "execution_identity": "forge:run:example-001",
+    "repository": "mncs-numerics",
+    "revision": "2a76bb9",
+    "argv": ["python3", "scripts/run_tests.py", "--backends", "mncs-research-bytecode"],
+    "executable": "python3",
+    "host_pid": 4242,
+    "host_start_marker": 987654321,
+    "envelope": {"memory_max_bytes": 4294967296, "cpu_quota_cores": 4.0},
+    "status": "active",
+    "outcome": "not_finished",
+    "verification_identity": "mncs:0.2:test-case:probe::probe_abs::7140803632f7a500a235bfd2cf999d5985becdfcc9437095bff3bbd484360fe9",
+    "evidence_path": "target/evidence-20260926T042037Z.json",
+    "source": "forge_observation"
+  },
+  {
+    "execution_identity": "mncs-test:05f01523cd860c96529376b4b04fe6ef1faaad1c43193480d2fe8936cc488f01",
+    "status": "completed",
+    "outcome": "pass",
+    "verification_identity": "tests.self_suite",
+    "source": "test_result"
+  },
+  {
+    "execution_identity": "forge:run:interrupted-009",
+    "repository": "mncs-math",
+    "status": "completed",
+    "outcome": "unknown",
+    "unknown_reason": "host interruption before the envelope was written",
+    "source": "forge_receipt"
+  }
+]
