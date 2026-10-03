@@ -1,5 +1,21 @@
 # mncs-system-monitor
 
+<!-- MNCS:generated:begin -->
+## Project entry
+
+Machine-native system observability surface: bounded Linux host snapshots with interval-qualified values exposed through both a human terminal view and versioned machine-readable JSON, plus canonical execution correlation.
+
+```bash
+cargo test --workspace
+```
+
+Declared capabilities (declarations do not establish execution health):
+
+- `system-observability/0.1.0` — observability-surface (experimental)
+
+Semantic sources and ownership: `.mncs/projections.json`.
+<!-- MNCS:generated:end -->
+
 [![CI](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml)
 
 A machine-native system observability surface with both human and machine projections.
