@@ -1,5 +1,8 @@
 # mncs-system-monitor
 
+<!-- MNCS:generated:begin -->
+<!-- MNCS:generated:end -->
+
 [![CI](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/epi13/mncs-system-monitor/actions/workflows/ci.yml)
 
 A machine-native system observability surface with both human and machine projections.

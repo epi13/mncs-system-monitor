@@ -1,0 +1,17 @@
+{
+  "schema_version": "mncs.project-intent/1",
+  "purpose": "Machine-native system observability surface: bounded Linux host snapshots with interval-qualified values exposed through both a human terminal view and versioned machine-readable JSON, plus canonical execution correlation.",
+  "entry": [
+    "cargo test --workspace"
+  ],
+  "milestones": [
+    {
+      "id": "mncs-system-monitor:projection-conformance",
+      "title": "Declared ambient projection surfaces satisfy their contract",
+      "subject_slot": "declarations",
+      "evidence": "projection-conformance",
+      "dependencies": [],
+      "blockers": []
+    }
+  ]
+}
