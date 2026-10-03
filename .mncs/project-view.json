@@ -1,0 +1,22 @@
+{
+  "capabilities": [
+    {
+      "contract": "system-observability",
+      "fingerprint_sources": [
+        "crates/"
+      ],
+      "kind": "observability-surface",
+      "stability": "experimental",
+      "version": "0.1.0"
+    }
+  ],
+  "dependencies": [],
+  "entry": [
+    "cargo test --workspace"
+  ],
+  "purpose": "Machine-native system observability surface: bounded Linux host snapshots with interval-qualified values exposed through both a human terminal view and versioned machine-readable JSON, plus canonical execution correlation.",
+  "repository": "mncs-system-monitor",
+  "schema_version": "mncs.project-view/1",
+  "source_identity": "sha256:be2f5cae03ed2fcb04dae81cc083dacc0145a5380e8f260859c7bc465edb7a8d",
+  "structure": {}
+}
