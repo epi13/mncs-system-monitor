@@ -435,6 +435,12 @@ mod tests {
             host_pid: pid,
             host_start_marker: marker,
             envelope: ResourceEnvelope::default(),
+            resource_observations: Default::default(),
+            harness_status: None,
+            termination_category: None,
+            termination_error_code: None,
+            process_exit_code: None,
+            process_signal: None,
             status,
             outcome: VerificationOutcome::NotFinished,
             verification_identity: None,
@@ -524,6 +530,7 @@ mod tests {
         let mut rec = record("a", ExecutionStatus::Active, Some(100), Some(7));
         rec.envelope = ResourceEnvelope {
             memory_max_bytes: Some(1_000),
+            process_count_max: None,
             cpu_quota_cores: None,
             disk_min_free_bytes: None,
             declared: true,

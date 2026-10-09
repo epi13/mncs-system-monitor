@@ -20,7 +20,10 @@ pub use correlate::{
     correlate, reconcile_after_restart, Anomaly, AnomalyKind, CorrelationReport, HostSaturation,
     LinkConfidence, Linkage, RestartClass, RestartItem, RestartReport,
 };
-pub use projection::{correlation_report_value, restart_report_value, CORRELATION_SCHEMA};
+pub use projection::{
+    correlation_report_value, execution_records_value, restart_report_value, CORRELATION_SCHEMA,
+    EXECUTION_RECORDS_SCHEMA,
+};
 pub use record::{
     execution_records_from_json, execution_records_from_test_result, ExecutionIdentity,
     ExecutionRecord, ExecutionStatus, IngestError, RecordSource, RecordWindow, ResourceEnvelope,

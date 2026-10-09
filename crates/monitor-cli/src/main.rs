@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use mncs_execution_correlation::{
     correlate, correlation_report_value, execution_records_from_json,
-    execution_records_from_test_result, reconcile_after_restart, restart_report_value,
-    CorrelationReport, ExecutionRecord, HostSaturation,
+    execution_records_from_test_result, execution_records_value, reconcile_after_restart,
+    restart_report_value, CorrelationReport, ExecutionRecord, HostSaturation,
 };
 use mncs_host_collector::{Collector, PlatformCollector};
 use mncs_machine_projection::StructuredProjection;
@@ -136,8 +136,8 @@ fn usage() -> &'static str {
 Default mode is an interactive TUI when stdout is a terminal and a concise snapshot otherwise.\n\
 --json emits the semantic snapshot envelope, including evidence status and bounded history.\n\
 --executions correlates the snapshot against ingested canonical execution records (the\n\
-monitor's own record envelope, or a mncs.test-result/1 envelope) and merges a `correlation`\n\
-section into --json output.\n\
+monitor's own record envelope, an experimental Forge receipt, or a mncs.test-result/1 envelope)\n\
+and merges `correlation` plus an `execution_records` section into --json output.\n\
 --watch-exe names an executable to flag when it runs with no linked Active execution; repeat\n\
 for several names. --reconcile prints a restart-reconciliation report for FILE and exits."
 }
@@ -194,13 +194,11 @@ fn run_machine(config: Config) -> Result<(), Box<dyn std::error::Error>> {
         if correlated {
             let saturation = HostSaturation::from_snapshot(&snapshot);
             let report = correlate(&records, &snapshot, &config.watch_executables, saturation);
-            println!(
-                "{}",
-                projection.json_with(
-                    &snapshot,
-                    &[("correlation", correlation_report_value(&report))]
-                )?
-            );
+            let mut sections = vec![("correlation", correlation_report_value(&report))];
+            if !records.is_empty() {
+                sections.push(("execution_records", execution_records_value(&records)));
+            }
+            println!("{}", projection.json_with(&snapshot, &sections)?);
         } else {
             println!("{}", projection.json(&snapshot)?);
         }

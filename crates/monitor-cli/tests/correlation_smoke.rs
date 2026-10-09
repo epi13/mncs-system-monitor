@@ -20,6 +20,28 @@ fn fixture_records() -> String {
     )
 }
 
+fn forge_receipt() -> String {
+    format!(
+        r#"{{
+            "record_type": "mncs-execution-receipt",
+            "schema_version": "0.1-experimental",
+            "receipt_identity": "forge:smoke:resource-1",
+            "lifecycle": {{"termination_category": "signal"}},
+            "process": {{"harness_status": "PASS", "exit_code": null, "signal": 9}},
+            "extensions": {{"forge:local-process": {{
+                "termination_error_code": null,
+                "resource_envelope": {{"memory_max_bytes": 8192, "tasks_max": 8}},
+                "resource_observations": {{"resource_observations": {{
+                    "host_pid": {ABSENT_PID},
+                    "host_start_marker": 991,
+                    "cgroup_memory_peak_bytes": 7000,
+                    "cpu_time_microseconds": 250
+                }}}}
+            }}}}
+        }}"#
+    )
+}
+
 fn write_fixture(name: &str, contents: &str) -> std::path::PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!("mncs-monitor-{name}-{}", std::process::id()));
@@ -62,6 +84,47 @@ fn json_correlation_flags_stale_active() {
         .map(|anomaly| anomaly["kind"].as_str().expect("kind"))
         .collect();
     assert_eq!(kinds, vec!["stale_active_execution"]);
+}
+
+#[test]
+fn json_ingests_forge_receipt_and_keeps_operational_facts_separate() {
+    let fixture = write_fixture("forge-receipt", &forge_receipt());
+    let output = Command::new(monitor_bin())
+        .args([
+            "--json",
+            "--once",
+            "--history",
+            "1",
+            "--executions",
+            fixture.to_str().expect("path"),
+        ])
+        .output()
+        .expect("monitor runs");
+    std::fs::remove_file(&fixture).ok();
+    assert!(
+        output.status.success(),
+        "valid Forge receipt is ingested: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("JSON envelope");
+    assert_eq!(
+        envelope["correlation"]["links"][0]["linkage"],
+        "process_absent"
+    );
+    let record = &envelope["execution_records"]["records"][0];
+    assert_eq!(record["execution"], "forge:smoke:resource-1");
+    assert_eq!(record["source"], "forge_receipt");
+    assert_eq!(record["harness_status"], "PASS");
+    assert_eq!(record["verification_outcome"]["status"], "unknown");
+    assert_eq!(record["termination"]["category"], "signal");
+    assert_eq!(record["termination"]["process_signal"], 9);
+    assert_eq!(record["process_identity"]["host_start_marker"], 991);
+    assert_eq!(record["resource_envelope"]["process_count_max"], 8);
+    assert_eq!(
+        record["resource_observations"]["cgroup_memory_peak_bytes"],
+        7000
+    );
 }
 
 #[test]

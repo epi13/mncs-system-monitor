@@ -2,8 +2,11 @@
 //!
 //! A record is a claim made by its owning subsystem, copied here for correlation. The monitor
 //! never authors execution state: [`execution_records_from_json`] accepts the monitor's own
-//! ingestion envelope, and [`execution_records_from_test_result`] reads the outcome section of
-//! a `mncs.test-result/1` envelope without reinterpreting it.
+//! ingestion envelope, [`execution_records_from_test_result`] reads the outcome section of a
+//! `mncs.test-result/1` envelope, and Forge receipts contribute only their declared operational
+//! facts without being upgraded into compiler-semantic claims.
+
+use std::collections::BTreeMap;
 
 use serde_json::Value;
 
@@ -12,6 +15,8 @@ pub const EXECUTION_RECORD_SCHEMA: &str = "mncs.system-monitor.execution-record.
 
 /// The schema this crate reads test outcomes from. Anything else is rejected, never widened.
 const TEST_RESULT_SCHEMA: &str = "mncs.test-result/1";
+const FORGE_RECEIPT_TYPE: &str = "mncs-execution-receipt";
+const FORGE_RECEIPT_VERSION: &str = "0.1-experimental";
 
 /// An opaque canonical execution identity: a Forge run/record identity, a test `run_id`, or an
 /// explicitly assigned token. The monitor never parses inside it.
@@ -44,6 +49,7 @@ pub enum VerificationOutcome {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ResourceEnvelope {
     pub memory_max_bytes: Option<u64>,
+    pub process_count_max: Option<u64>,
     pub cpu_quota_cores: Option<f64>,
     pub disk_min_free_bytes: Option<u64>,
     pub declared: bool,
@@ -72,6 +78,12 @@ pub struct ExecutionRecord {
     pub host_pid: Option<u32>,
     pub host_start_marker: Option<u64>,
     pub envelope: ResourceEnvelope,
+    pub resource_observations: BTreeMap<String, u64>,
+    pub harness_status: Option<String>,
+    pub termination_category: Option<String>,
+    pub termination_error_code: Option<String>,
+    pub process_exit_code: Option<i64>,
+    pub process_signal: Option<u64>,
     pub status: ExecutionStatus,
     pub outcome: VerificationOutcome,
     pub verification_identity: Option<String>,
@@ -199,6 +211,7 @@ fn parse_envelope(value: &Value) -> Result<ResourceEnvelope, IngestError> {
     };
     Ok(ResourceEnvelope {
         memory_max_bytes: optional_u64(envelope, "memory_max_bytes")?,
+        process_count_max: optional_u64(envelope, "process_count_max")?,
         cpu_quota_cores,
         disk_min_free_bytes: optional_u64(envelope, "disk_min_free_bytes")?,
         declared: true,
@@ -216,6 +229,19 @@ fn parse_source(value: &Value) -> RecordSource {
 }
 
 fn record_from_value(value: &Value) -> Result<ExecutionRecord, IngestError> {
+    if value.get("record_type").and_then(Value::as_str) == Some(FORGE_RECEIPT_TYPE) {
+        return forge_receipt_from_value(value);
+    }
+    if value.get("record_type").is_some() {
+        return Err(IngestError::UnexpectedSchema {
+            expected: EXECUTION_RECORD_SCHEMA,
+            found: value
+                .get("record_type")
+                .and_then(Value::as_str)
+                .unwrap_or("(invalid)")
+                .to_string(),
+        });
+    }
     check_ingestion_schema(value)?;
     let identity = value
         .get("execution_identity")
@@ -266,11 +292,222 @@ fn record_from_value(value: &Value) -> Result<ExecutionRecord, IngestError> {
         host_pid,
         host_start_marker: optional_u64(value, "host_start_marker")?,
         envelope: parse_envelope(value)?,
+        resource_observations: parse_resource_observations(value.get("resource_observations"))?,
+        harness_status: None,
+        termination_category: None,
+        termination_error_code: None,
+        process_exit_code: None,
+        process_signal: None,
         status,
         outcome: parse_outcome(value)?,
         verification_identity: optional_string(value, "verification_identity")?,
         evidence_path: optional_string(value, "evidence_path")?,
         source: parse_source(value),
+    })
+}
+
+fn parse_resource_observations(
+    value: Option<&Value>,
+) -> Result<BTreeMap<String, u64>, IngestError> {
+    let Some(value) = value else {
+        return Ok(BTreeMap::new());
+    };
+    let Some(observations) = value.as_object() else {
+        return Err(IngestError::InvalidValue {
+            field: "resource_observations",
+            detail: "expected an object of unsigned integer observations".to_string(),
+        });
+    };
+    let mut parsed = BTreeMap::new();
+    for (name, value) in observations {
+        let number = value.as_u64().ok_or(IngestError::InvalidValue {
+            field: "resource_observations",
+            detail: format!("observation '{name}' must be an unsigned integer"),
+        })?;
+        parsed.insert(name.clone(), number);
+    }
+    Ok(parsed)
+}
+
+fn nested_optional_string<'a>(
+    value: &'a Value,
+    parent: &'static str,
+    field: &'static str,
+) -> Result<Option<String>, IngestError> {
+    match value.get(parent).and_then(|item| item.get(field)) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.clone())),
+        Some(_) => Err(IngestError::InvalidValue {
+            field,
+            detail: "expected a string".to_string(),
+        }),
+    }
+}
+
+fn nested_optional_i64(
+    value: &Value,
+    parent: &'static str,
+    field: &'static str,
+) -> Result<Option<i64>, IngestError> {
+    match value.get(parent).and_then(|item| item.get(field)) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => number.as_i64().map(Some).ok_or(IngestError::InvalidValue {
+            field,
+            detail: "expected a signed integer".to_string(),
+        }),
+        Some(_) => Err(IngestError::InvalidValue {
+            field,
+            detail: "expected a signed integer".to_string(),
+        }),
+    }
+}
+
+fn forge_receipt_from_value(value: &Value) -> Result<ExecutionRecord, IngestError> {
+    let found_version = value
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .unwrap_or("(absent)");
+    if found_version != FORGE_RECEIPT_VERSION {
+        return Err(IngestError::UnexpectedSchema {
+            expected: "mncs-execution-receipt/0.1-experimental",
+            found: format!("{FORGE_RECEIPT_TYPE}/{found_version}"),
+        });
+    }
+    let identity = value
+        .get("receipt_identity")
+        .and_then(Value::as_str)
+        .filter(|identity| !identity.is_empty())
+        .ok_or(IngestError::MissingField("receipt_identity"))?;
+    let extension = value
+        .get("extensions")
+        .and_then(|extensions| extensions.get("forge:local-process"))
+        .ok_or(IngestError::MissingField("extensions.forge:local-process"))?;
+    if !extension.is_object() {
+        return Err(IngestError::InvalidValue {
+            field: "extensions.forge:local-process",
+            detail: "expected an object".to_string(),
+        });
+    }
+    let observation_envelope = extension
+        .get("resource_observations")
+        .ok_or(IngestError::MissingField("resource_observations"))?;
+    if !observation_envelope.is_object() {
+        return Err(IngestError::InvalidValue {
+            field: "resource_observations",
+            detail: "expected an object".to_string(),
+        });
+    }
+    let resource_observations =
+        parse_resource_observations(observation_envelope.get("resource_observations"))?;
+    let host_pid = resource_observations.get("host_pid").copied();
+    let host_start_marker = resource_observations.get("host_start_marker").copied();
+    if host_pid.is_some() != host_start_marker.is_some() {
+        return Err(IngestError::InvalidValue {
+            field: "extensions.forge:local-process.resource_observations",
+            detail: "host_pid and host_start_marker must be present together".to_string(),
+        });
+    }
+    let host_pid = host_pid
+        .map(|pid| {
+            u32::try_from(pid).map_err(|_| IngestError::InvalidValue {
+                field: "host_pid",
+                detail: "PID exceeds the host PID range".to_string(),
+            })
+        })
+        .transpose()?;
+    let local_envelope = extension
+        .get("resource_envelope")
+        .ok_or(IngestError::MissingField("resource_envelope"))?;
+    if !local_envelope.is_object() {
+        return Err(IngestError::InvalidValue {
+            field: "resource_envelope",
+            detail: "expected an object".to_string(),
+        });
+    }
+    let envelope = ResourceEnvelope {
+        memory_max_bytes: optional_u64(local_envelope, "memory_max_bytes")?,
+        process_count_max: optional_u64(local_envelope, "tasks_max")?,
+        cpu_quota_cores: None,
+        disk_min_free_bytes: None,
+        declared: true,
+    };
+    let termination_category = nested_optional_string(value, "lifecycle", "termination_category")?
+        .ok_or(IngestError::MissingField("lifecycle.termination_category"))?;
+    let status = match termination_category.as_str() {
+        "cancelled" => ExecutionStatus::Cancelled,
+        "completed"
+        | "nonzero-exit"
+        | "timeout"
+        | "signal"
+        | "crash"
+        | "resource-limit"
+        | "output-limit"
+        | "policy-rejected"
+        | "internal-runner-error" => ExecutionStatus::Completed,
+        found => {
+            return Err(IngestError::InvalidValue {
+                field: "lifecycle.termination_category",
+                detail: format!("unsupported Forge termination category '{found}'"),
+            });
+        }
+    };
+    let harness_status = nested_optional_string(value, "process", "harness_status")?
+        .ok_or(IngestError::MissingField("process.harness_status"))?;
+    if !matches!(harness_status.as_str(), "PASS" | "FAIL" | "UNKNOWN") {
+        return Err(IngestError::InvalidValue {
+            field: "process.harness_status",
+            detail: "expected PASS, FAIL, or UNKNOWN".to_string(),
+        });
+    }
+    let termination_error_code = match extension.get("termination_error_code") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(code)) => Some(code.clone()),
+        Some(_) => {
+            return Err(IngestError::InvalidValue {
+                field: "termination_error_code",
+                detail: "expected a string".to_string(),
+            });
+        }
+    };
+    let process_signal = match value.get("process").and_then(|item| item.get("signal")) {
+        None | Some(Value::Null) => None,
+        Some(Value::Number(number)) => {
+            number.as_u64().map(Some).ok_or(IngestError::InvalidValue {
+                field: "process.signal",
+                detail: "expected an unsigned integer".to_string(),
+            })?
+        }
+        Some(_) => {
+            return Err(IngestError::InvalidValue {
+                field: "process.signal",
+                detail: "expected an unsigned integer".to_string(),
+            });
+        }
+    };
+    Ok(ExecutionRecord {
+        identity: ExecutionIdentity(identity.to_string()),
+        repository: None,
+        revision: None,
+        argv: Vec::new(),
+        executable: None,
+        host_pid,
+        host_start_marker,
+        envelope,
+        resource_observations,
+        harness_status: Some(harness_status),
+        termination_category: Some(termination_category),
+        termination_error_code,
+        process_exit_code: nested_optional_i64(value, "process", "exit_code")?,
+        process_signal,
+        status,
+        outcome: VerificationOutcome::Unknown {
+            reason: Some(
+                "Forge receipt does not assert compiler semantic verification".to_string(),
+            ),
+        },
+        verification_identity: None,
+        evidence_path: None,
+        source: RecordSource::ForgeReceipt,
     })
 }
 
@@ -334,6 +571,12 @@ pub fn execution_records_from_test_result(text: &str) -> Result<Vec<ExecutionRec
         host_pid: None,
         host_start_marker: None,
         envelope: ResourceEnvelope::default(),
+        resource_observations: BTreeMap::new(),
+        harness_status: None,
+        termination_category: None,
+        termination_error_code: None,
+        process_exit_code: None,
+        process_signal: None,
         status: ExecutionStatus::Completed,
         outcome,
         verification_identity: value
@@ -423,7 +666,8 @@ mod tests {
                 "executable": "python3",
                 "host_pid": 4242,
                 "host_start_marker": 99,
-                "envelope": {"memory_max_bytes": 1073741824, "cpu_quota_cores": 2.0},
+                "envelope": {"memory_max_bytes": 1073741824, "process_count_max": 16, "cpu_quota_cores": 2.0},
+                "resource_observations": {"cgroup_memory_peak_bytes": 5000},
                 "status": "active",
                 "outcome": "not_finished",
                 "source": "forge_observation"
@@ -435,6 +679,11 @@ mod tests {
         assert_eq!(record.identity.0, "forge:run:abc");
         assert_eq!(record.host_pid, Some(4242));
         assert_eq!(record.envelope.memory_max_bytes, Some(1_073_741_824));
+        assert_eq!(record.envelope.process_count_max, Some(16));
+        assert_eq!(
+            record.resource_observations["cgroup_memory_peak_bytes"],
+            5000
+        );
         assert!(record.envelope.declared);
         assert_eq!(record.status, ExecutionStatus::Active);
         assert_eq!(record.source, RecordSource::ForgeObservation);
@@ -474,6 +723,71 @@ mod tests {
             unknown[0].outcome,
             VerificationOutcome::Unknown { .. }
         ));
+    }
+
+    #[test]
+    fn ingests_exact_forge_receipt_without_promoting_harness_status() {
+        let records = execution_records_from_json(
+            r#"{
+                "record_type": "mncs-execution-receipt",
+                "schema_version": "0.1-experimental",
+                "receipt_identity": "aabbcc",
+                "lifecycle": {"termination_category": "completed"},
+                "process": {"harness_status": "PASS", "exit_code": 0, "signal": null},
+                "extensions": {"forge:local-process": {
+                    "termination_error_code": null,
+                    "resource_envelope": {"memory_max_bytes": 4096, "tasks_max": 8},
+                    "resource_observations": {"resource_observations": {
+                        "host_pid": 4242,
+                        "host_start_marker": 99,
+                        "cgroup_memory_peak_bytes": 3000,
+                        "cpu_time_microseconds": 250
+                    }
+                    }
+                }}
+            }"#,
+        )
+        .expect("pinned Forge receipt parses");
+        let record = &records[0];
+        assert_eq!(record.identity.0, "aabbcc");
+        assert_eq!(record.source, RecordSource::ForgeReceipt);
+        assert_eq!(record.host_pid, Some(4242));
+        assert_eq!(record.host_start_marker, Some(99));
+        assert_eq!(record.envelope.memory_max_bytes, Some(4096));
+        assert_eq!(record.envelope.process_count_max, Some(8));
+        assert_eq!(
+            record.resource_observations["cgroup_memory_peak_bytes"],
+            3000
+        );
+        assert_eq!(record.harness_status.as_deref(), Some("PASS"));
+        assert_eq!(record.termination_category.as_deref(), Some("completed"));
+        assert_eq!(record.process_exit_code, Some(0));
+        assert!(matches!(
+            record.outcome,
+            VerificationOutcome::Unknown { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_unsupported_forge_receipt_version_and_partial_process_identity() {
+        let wrong_version = execution_records_from_json(
+            r#"{"record_type":"mncs-execution-receipt","schema_version":"0.2",
+                "receipt_identity":"x"}"#,
+        )
+        .expect_err("unknown receipt versions stay rejected");
+        assert!(matches!(
+            wrong_version,
+            IngestError::UnexpectedSchema { .. }
+        ));
+
+        let partial_identity = execution_records_from_json(
+            r#"{"record_type":"mncs-execution-receipt","schema_version":"0.1-experimental",
+                "receipt_identity":"x","lifecycle":{"termination_category":"completed"},
+                "process":{"harness_status":"UNKNOWN"},"extensions":{"forge:local-process":{
+                    "resource_observations":{"resource_observations":{"host_pid":42}}}}}"#,
+        )
+        .expect_err("process identity requires PID and start marker together");
+        assert!(matches!(partial_identity, IngestError::InvalidValue { .. }));
     }
 
     #[test]
