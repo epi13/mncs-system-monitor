@@ -54,6 +54,23 @@ fn monitor_bin() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_mncs-system-monitor"))
 }
 
+fn private_artifact_dir(name: &str) -> std::path::PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "mncs-monitor-artifacts-{name}-{}",
+        std::process::id()
+    ));
+    std::fs::remove_dir_all(&path).ok();
+    std::fs::create_dir(&path).expect("artifact directory");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
+            .expect("private artifact permissions");
+    }
+    path
+}
+
 #[test]
 fn json_correlation_flags_stale_active() {
     let fixture = write_fixture("records", &fixture_records());
@@ -156,4 +173,68 @@ fn malformed_records_are_a_hard_error() {
         .expect("monitor runs");
     std::fs::remove_file(&fixture).ok();
     assert!(!output.status.success(), "malformed records fail loudly");
+}
+
+#[test]
+fn environment_invocation_publishes_a_minimized_resource_sample() {
+    let receipt = write_fixture("resource-sample-receipt", &forge_receipt());
+    let artifact_dir = private_artifact_dir("resource-sample");
+    let output = Command::new(monitor_bin())
+        .args([
+            "--resource-sample",
+            "--executions",
+            receipt.to_str().expect("receipt path"),
+        ])
+        .env("MNCS_ENV_SESSION_ARTIFACT_DIR", &artifact_dir)
+        .output()
+        .expect("monitor runs");
+    assert!(
+        output.status.success(),
+        "monitor succeeds: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let artifact = std::fs::read(artifact_dir.join("system-resource-sample.json"))
+        .expect("Environment resource sample artifact");
+    assert_eq!(
+        artifact, output.stdout,
+        "retained bytes match provider output"
+    );
+    let envelope: serde_json::Value = serde_json::from_slice(&artifact).expect("JSON envelope");
+    assert_eq!(envelope["schema"], "mncs.system-monitor.resource-sample.v1");
+    assert!(envelope.get("hostname").is_none());
+    assert!(envelope.get("processes").is_none());
+    assert_eq!(
+        envelope["execution_records"]["records"][0]["source"],
+        "forge_receipt"
+    );
+    assert_eq!(
+        envelope["execution_records"]["records"][0]["resource_observations"]
+            ["cgroup_memory_peak_bytes"],
+        7000
+    );
+    std::fs::remove_dir_all(&artifact_dir).ok();
+    std::fs::remove_file(receipt).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn environment_invocation_does_not_follow_resource_artifact_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let artifact_dir = private_artifact_dir("symlink");
+    let outside = artifact_dir.with_extension("outside");
+    std::fs::write(&outside, b"preserve").expect("outside fixture");
+    symlink(&outside, artifact_dir.join("system-resource-sample.json")).expect("artifact symlink");
+    let output = Command::new(monitor_bin())
+        .arg("--resource-sample")
+        .env("MNCS_ENV_SESSION_ARTIFACT_DIR", &artifact_dir)
+        .output()
+        .expect("monitor runs");
+    assert!(!output.status.success(), "symlink destination is rejected");
+    assert_eq!(
+        std::fs::read(&outside).expect("outside fixture remains"),
+        b"preserve"
+    );
+    std::fs::remove_dir_all(&artifact_dir).ok();
+    std::fs::remove_file(&outside).ok();
 }

@@ -101,6 +101,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p mncs-system-monitor -- --once
 cargo run -p mncs-system-monitor -- --json --once
+cargo run -p mncs-system-monitor -- --resource-sample
 cargo run -p mncs-system-monitor -- --json --once --executions examples/executions-sample.json
 cargo run -p mncs-system-monitor -- --reconcile examples/executions-sample.json
 ```
@@ -109,6 +110,13 @@ The default command enters the interactive TUI when stdout is a terminal. Use `-
 concise human snapshot, `--json` for the machine projection, `--interval-ms N` to set the sampling
 interval, and `--history N` to bound retained history. The first sample intentionally reports
 CPU/rate fields as warming when no valid counter interval exists.
+
+The Environment `system-resource-sample` capability emits aggregate CPU and memory facts without
+host names, live process lists, command lines, or process history. An optional exact Forge receipt
+can retain the process identity fields that Forge already recorded. Environment provides a private
+per-invocation artifact directory; the monitor writes the sample to
+`system-resource-sample.json` there, and Environment publishes it as an immutable Store artifact.
+Direct `--json` CLI use remains stdout-only and retains the full observability projection.
 
 ## Canonical execution correlation
 

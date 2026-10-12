@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
+use std::io::Write;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use mncs_execution_correlation::{
     correlate, correlation_report_value, execution_records_from_json,
     execution_records_from_test_result, execution_records_value, reconcile_after_restart,
-    restart_report_value, CorrelationReport, ExecutionRecord, HostSaturation,
+    restart_report_value, CorrelationReport, ExecutionRecord, HostSaturation, RecordSource,
 };
 use mncs_host_collector::{Collector, PlatformCollector};
 use mncs_machine_projection::StructuredProjection;
@@ -14,6 +16,8 @@ use mncs_tui_host::{Cell, Color, Event, Frame, Key, Size, Style, TerminalSession
 const DEFAULT_INTERVAL_MS: u64 = 1_000;
 const DEFAULT_HISTORY: usize = 120;
 const TEST_RESULT_SCHEMA_VERSION: &str = "mncs.test-result/1";
+const ENVIRONMENT_ARTIFACT_DIR: &str = "MNCS_ENV_SESSION_ARTIFACT_DIR";
+const RESOURCE_SAMPLE_ARTIFACT: &str = "system-resource-sample.json";
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -22,6 +26,7 @@ struct Config {
     json: bool,
     once: bool,
     no_tui: bool,
+    resource_sample: bool,
     executions: Option<String>,
     watch_executables: Vec<String>,
     reconcile: Option<String>,
@@ -35,6 +40,7 @@ impl Default for Config {
             json: false,
             once: false,
             no_tui: false,
+            resource_sample: false,
             executions: None,
             watch_executables: Vec::new(),
             reconcile: None,
@@ -52,6 +58,8 @@ fn main() {
     };
     let result = if config.reconcile.is_some() {
         run_reconcile(config)
+    } else if config.resource_sample {
+        run_resource_sample(config)
     } else if config.json {
         run_machine(config)
     } else {
@@ -74,6 +82,7 @@ where
             "--json" => config.json = true,
             "--once" => config.once = true,
             "--no-tui" => config.no_tui = true,
+            "--resource-sample" => config.resource_sample = true,
             "--interval-ms" => {
                 let value = args
                     .next()
@@ -128,13 +137,18 @@ where
             other => return Err(format!("unknown option {other}\n\n{}", usage())),
         }
     }
+    if config.resource_sample && config.reconcile.is_some() {
+        return Err("--resource-sample cannot be combined with --reconcile".into());
+    }
     Ok(config)
 }
 
 fn usage() -> &'static str {
-    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--interval-ms N] [--history N]\n                         [--executions FILE] [--watch-exe NAME]... [--reconcile FILE]\n\n\
+    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--resource-sample]\n                         [--interval-ms N] [--history N]\n                         [--executions FILE] [--watch-exe NAME]... [--reconcile FILE]\n\n\
 Default mode is an interactive TUI when stdout is a terminal and a concise snapshot otherwise.\n\
 --json emits the semantic snapshot envelope, including evidence status and bounded history.\n\
+--resource-sample emits aggregate host metrics and at most one Forge receipt; Environment\n\
+stores this privacy-minimized projection as an immutable invocation artifact.\n\
 --executions correlates the snapshot against ingested canonical execution records (the\n\
 monitor's own record envelope, an experimental Forge receipt, or a mncs.test-result/1 envelope)\n\
 and merges `correlation` plus an `execution_records` section into --json output.\n\
@@ -198,15 +212,111 @@ fn run_machine(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             if !records.is_empty() {
                 sections.push(("execution_records", execution_records_value(&records)));
             }
-            println!("{}", projection.json_with(&snapshot, &sections)?);
+            let json = projection.json_with(&snapshot, &sections)?;
+            println!("{json}");
         } else {
-            println!("{}", projection.json(&snapshot)?);
+            let json = projection.json(&snapshot)?;
+            println!("{json}");
         }
         if config.once {
             return Ok(());
         }
         std::thread::sleep(config.interval);
     }
+}
+
+fn run_resource_sample(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    if !config.watch_executables.is_empty() {
+        return Err("resource samples do not accept watched executable names".into());
+    }
+    let records = match config.executions.as_deref() {
+        Some(path) => load_execution_records(path)?,
+        None => Vec::new(),
+    };
+    if records.len() > 1 {
+        return Err("resource samples accept at most one Forge receipt".into());
+    }
+    if records
+        .first()
+        .is_some_and(|record| record.source != RecordSource::ForgeReceipt)
+    {
+        return Err("resource samples accept only a Forge execution receipt".into());
+    }
+
+    let mut collector = PlatformCollector::new();
+    let mut sampler = Sampler::new(1);
+    let snapshot = sampler.accept(collector.collect()?).snapshot;
+    let sections = if config.executions.is_some() {
+        vec![("execution_records", execution_records_value(&records))]
+    } else {
+        Vec::new()
+    };
+    let json = StructuredProjection.resource_sample_json(&snapshot, &sections)?;
+    save_environment_artifact(&json, RESOURCE_SAMPLE_ARTIFACT)?;
+    println!("{json}");
+    Ok(())
+}
+
+/// Save the exact resource projection into Environment's private invocation
+/// workspace when this provider is called through Environment. Environment
+/// owns and later publishes the directory as an immutable Store artifact.
+/// Direct CLI use without that contract remains stdout-only.
+fn save_environment_artifact(json: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(raw_directory) = std::env::var_os(ENVIRONMENT_ARTIFACT_DIR) else {
+        return Ok(());
+    };
+    let directory = PathBuf::from(raw_directory);
+    let metadata = std::fs::symlink_metadata(&directory)?;
+    if !metadata.file_type().is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Environment artifact destination is not a real directory",
+        )
+        .into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.mode() & 0o077 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Environment artifact directory must be private to its owner",
+            )
+            .into());
+        }
+    }
+
+    let destination = directory.join(filename);
+    match std::fs::symlink_metadata(&destination) {
+        Ok(existing) if !existing.file_type().is_file() => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Environment resource artifact destination is not a regular file",
+            )
+            .into());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+
+    let temporary = directory.join(format!(".{filename}.{}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let write_result = (|| -> Result<(), std::io::Error> {
+        file.write_all(json.as_bytes())?;
+        file.write_all(b"\n")?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, &destination)?;
+        Ok(())
+    })();
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    write_result?;
+    Ok(())
 }
 
 fn run_human(config: Config) -> Result<(), Box<dyn std::error::Error>> {

@@ -12,6 +12,7 @@ use mncs_monitor_core::{
 use serde_json::{json, Value};
 
 pub const SNAPSHOT_SCHEMA: &str = "mncs.system-monitor.snapshot.v1";
+pub const RESOURCE_SAMPLE_SCHEMA: &str = "mncs.system-monitor.resource-sample.v1";
 
 /// A machine-facing envelope that preserves the monitor model and its uncertainty.
 #[derive(Debug)]
@@ -100,6 +101,45 @@ impl StructuredProjection {
         sections: &[(&str, Value)],
     ) -> Result<String, serde_json::Error> {
         self.project(snapshot).to_json_with(sections)
+    }
+
+    /// Emit the bounded host metrics needed for resource admission without
+    /// retaining sampled process identities, command lines, host names, or
+    /// other unrelated live machine state. Optional caller-supplied sections
+    /// remain unchanged so an exact owner receipt can retain its provenance.
+    pub fn resource_sample_json(
+        &self,
+        snapshot: &SystemSnapshot,
+        sections: &[(&str, Value)],
+    ) -> Result<String, serde_json::Error> {
+        let mut value = json!({
+            "schema": RESOURCE_SAMPLE_SCHEMA,
+            "observed_at": snapshot.observed_at
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|time| time.as_millis() as u64),
+            "sample_time": snapshot.sample_time.map(time_value),
+            "host": {
+                "cpu_count": snapshot.cpu_count,
+                "cpu_utilization": snapshot.host_cpu.as_ref()
+                    .and_then(|cpu| cpu.utilization),
+                "cpu_status": snapshot.host_cpu.as_ref()
+                    .map(|cpu| status_label(cpu.status)).unwrap_or("unknown"),
+                "load_average": snapshot.load_average,
+                "memory_total_bytes": snapshot.memory_total_bytes,
+                "memory_available_bytes": snapshot.memory_available_bytes,
+                "memory_available_status": if snapshot.memory_available_bytes.is_some() {
+                    "observed"
+                } else {
+                    "unknown"
+                },
+            },
+        });
+        if let Value::Object(ref mut map) = value {
+            for (name, section) in sections {
+                map.insert((*name).to_string(), section.clone());
+            }
+        }
+        serde_json::to_string_pretty(&value)
     }
 }
 
@@ -351,5 +391,41 @@ mod tests {
         assert_eq!(value["schema"], SNAPSHOT_SCHEMA);
         assert!(value["host"]["cpu"].is_null());
         assert_eq!(value["process_count"], 0);
+    }
+
+    #[test]
+    fn resource_sample_is_minimized_and_keeps_unknown_memory_explicit() {
+        let snapshot = SystemSnapshot {
+            hostname: Some("private-host-name".into()),
+            processes: vec![Process {
+                identity: ProcessIdentity::new(123, Some(456)),
+                parent: None,
+                executable: "/private/path/worker".into(),
+                command_line: Some("secret --token value".into()),
+                uid: Some(1000),
+                user: Some("private-user".into()),
+                state: ProcessState::Running,
+                threads: Some(2),
+                cpu: None,
+                memory: None,
+                memory_status: ObservationStatus::Unknown,
+                io: None,
+                io_status: ObservationStatus::Unknown,
+            }],
+            ..SystemSnapshot::default()
+        };
+
+        let json = StructuredProjection
+            .resource_sample_json(&snapshot, &[])
+            .unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["schema"], RESOURCE_SAMPLE_SCHEMA);
+        assert_eq!(value["host"]["memory_available_status"], "unknown");
+        assert!(value["host"]["memory_available_bytes"].is_null());
+        assert!(value.get("hostname").is_none());
+        assert!(value.get("processes").is_none());
+        assert!(!json.contains("private-host-name"));
+        assert!(!json.contains("secret --token value"));
+        assert!(!json.contains("private-user"));
     }
 }

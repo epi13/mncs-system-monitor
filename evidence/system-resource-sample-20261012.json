@@ -1,0 +1,55 @@
+{
+  "schema_version": "mncs-system-monitor.resource-sample-evidence/1",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "recorded_at": "2026-10-12T07:43:18Z",
+  "owner": "mncs-system-monitor",
+  "session_id": "ses_7226fbcfe65820f7",
+  "source": {
+    "base_revision": "319178e92336e3833e9b3251a48af903f204f09a",
+    "files": [
+      {"path": ".mncs/project.json", "sha256": "598ce848378555ef9940548f1e3ba7aa0e579a1af60e7a5ecd36fa14b2fd9c08"},
+      {"path": "README.md", "sha256": "2b666b8352fbade4d16e816b91650e777e279e8b69de38cdac16266231736e7d"},
+      {"path": "crates/machine-projection/src/lib.rs", "sha256": "9265bfaf8cd2f6c8c9b8ce19846ba6e0117f0d7f7ecb9809d1c0853437758d51"},
+      {"path": "crates/monitor-cli/src/main.rs", "sha256": "c0bd7c71c1651e0dbc4f6b923e358636da7ebb0e832aeff21080b5b42f9bfcda"},
+      {"path": "crates/monitor-cli/tests/correlation_smoke.rs", "sha256": "29fc1f2eaf0459b7088504fba6ec7c381dea8fbc8ff95f8bb95e819c8924b49b"}
+    ],
+    "tested_executable": {
+      "path": "target/debug/mncs-system-monitor",
+      "sha256": "104d657b466a561449a61f5c9567b8f32575d5b89c5c6908a4fda2431f68b2fc"
+    }
+  },
+  "change": {
+    "capability": "mncs-system-monitor:system-resource-sample",
+    "artifact_schema": "mncs.system-monitor.resource-sample.v1",
+    "artifact_file": "system-resource-sample.json",
+    "data_minimization": "aggregate CPU and memory only; excludes host names, live process lists, command lines, and process history; an optional exact Forge receipt retains only its declared process identity fields",
+    "publication_owner": "mncs-environment"
+  },
+  "validation": {
+    "cargo_test_workspace": {"status": "pass", "passed": 45, "failed": 0},
+    "cargo_fmt_check": "pass",
+    "cargo_clippy": {
+      "status": "pass_with_existing_lint_suppressed",
+      "command": "cargo clippy --workspace --all-targets -- -D warnings -A clippy::needless_lifetimes",
+      "existing_unsuppressed_warning": "crates/execution-correlation/src/record.rs:338 needless_lifetimes"
+    },
+    "json_and_diff_checks": "pass",
+    "protected_bwrap_resource_sample": {
+      "status": "pass",
+      "schema": "mncs.system-monitor.resource-sample.v1",
+      "privacy_fields_omitted": true,
+      "raw_telemetry_retained_in_repository": false
+    },
+    "protected_environment_binding": {
+      "status": "available",
+      "binding_id": "cap_9a39cbc2cdf18f11",
+      "provider_checkout": "mncs-system-monitor@319178e92336e3833e9b3251a48af903f204f09a:main"
+    },
+    "environment_invocation": {
+      "status": "unknown",
+      "diagnostic": "Control operation-unavailable rejects this exact capability before provider execution",
+      "canonical_store_artifact_created": false
+    }
+  },
+  "readiness": "resource sample implementation and local artifact contract validated; protected canonical Store publication awaits the narrow Control allowlist operation"
+}

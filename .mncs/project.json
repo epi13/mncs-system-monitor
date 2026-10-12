@@ -1,15 +1,39 @@
 {
   "schema_version": "mncs-family.repository-manifest/v0alpha1",
   "repository": "mncs-system-monitor",
-  "revision": 1,
+  "revision": 2,
   "manifest_location": "in-repository",
   "authority": {"note": "System-monitor owns its domain vocabulary (processes, identity, resource samples, relationships, pressure signals, sampling policy, monitor uncertainty) plus human and machine projections of live host state. The host adapter owns OS interaction; mncs-tui owns terminal semantics (consumed as mncs-tui-host at git rev 0c6454c); mncs-language owns language/type/effect/identity/verification semantics. Live telemetry is observed at runtime, never committed as project truth."},
   "contracts": {
     "provides": [
-      {"contract": "system-observability", "version": "0.1.0", "kind": "observability-surface", "stability": "experimental", "fingerprint_sources": ["crates/"]}
+      {
+        "contract": "system-observability",
+        "version": "0.1.0",
+        "kind": "observability-surface",
+        "stability": "experimental",
+        "fingerprint_sources": ["crates/"]
+      },
+      {
+        "contract": "system-resource-sample",
+        "version": "1",
+        "kind": "privacy-minimized-resource-sample",
+        "stability": "experimental",
+        "effects": ["read"],
+        "fingerprint_sources": ["crates/"],
+        "artifact_contract": {
+          "artifact_schema": "mncs.system-monitor.resource-sample.v1",
+          "artifact_file": "system-resource-sample.json",
+          "publication_owner": "mncs-environment"
+        },
+        "invocation": {
+          "kind": "executable",
+          "path": "target/debug/mncs-system-monitor",
+          "fixed_argv": ["--resource-sample"]
+        }
+      }
     ],
     "consumes": [],
-    "tests": [{"test": "monitor-workspace-tests", "covers": ["system-observability"], "obligation": "self", "command": {"argv": ["cargo", "test", "--workspace"], "timeout_seconds": 1200}}]
+    "tests": [{"test": "monitor-workspace-tests", "covers": ["system-observability", "system-resource-sample"], "obligation": "self", "command": {"argv": ["cargo", "test", "--workspace"], "timeout_seconds": 1200}}]
   }
 ,
   "projection_inventory": ".mncs/projections.json",
