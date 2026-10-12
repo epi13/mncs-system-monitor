@@ -1,0 +1,62 @@
+{
+  "schema_version": "mncs-system-monitor.protected-resource-sample-acceptance/1",
+  "evidence_identity": "ev_system_monitor_protected_resource_sample_20261012",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-system-monitor",
+  "recorded_at": "2026-10-12T18:46:03.920Z",
+  "source": {
+    "repository": "mncs-system-monitor",
+    "revision": "16789dccb2105849c3f0ebbd3a547bad6c8792d4",
+    "executable": "target/debug/mncs-system-monitor",
+    "executable_sha256": "104d657b466a561449a61f5c9567b8f32575d5b89c5c6908a4fda2431f68b2fc"
+  },
+  "invocation": {
+    "capability": "mncs-system-monitor:system-resource-sample",
+    "binding_id": "cap_9a39cbc2cdf18f11",
+    "parent_request_id": "req_monitor_sample_protected_20261012_1845_002",
+    "protected_sandbox": "bwrap/project",
+    "return_code": 0
+  },
+  "canonical_artifact": {
+    "store_reference": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:95949219f13f32fa4d817bffe0b35e4d109937250a0d526a9bb72ddb70567aac",
+    "file": "system-resource-sample.json",
+    "schema": "mncs.system-monitor.resource-sample.v1",
+    "byte_count": 459,
+    "sha256": "b5adbcb8887af6ea859fd270268d4a91e4ea76d0d08cda4f17353a989d23273e"
+  },
+  "observation": {
+    "observed_at_unix_ms": 1791830763920,
+    "aggregate_metrics": {
+      "cpu_count": 8,
+      "memory_available_bytes": 9077444608,
+      "memory_total_bytes": 33411567616
+    },
+    "aggregate_status_fields_present": [
+      "cpu_status",
+      "memory_available_status"
+    ]
+  },
+  "fresh_process_readback": {
+    "method": "Environment artifact-read through authenticated project continuation",
+    "request_id": "req_monitor_sample_artifact_read_selected_20261012_1846_002",
+    "same_store_reference": true,
+    "sha256_verified": true,
+    "exact_byte_count": 459
+  },
+  "privacy": {
+    "hostname_recorded": false,
+    "process_list_recorded": false,
+    "command_lines_recorded": false,
+    "process_history_recorded": false,
+    "persisted_here": "bounded evidence pointer and aggregate measurements; full sample remains in canonical Store"
+  },
+  "readiness": {
+    "status": "partial",
+    "forge_execution_record_present": false,
+    "compiler_execution": "not performed",
+    "automation_decision": "not claimed",
+    "reason": "This sample contains no exact Forge execution receipt or subject identity. Automation must not treat it as a measured compiler execution or issue a compiler admission decision.",
+    "next": "After an owner-issued Forge handoff, capture a matching compiler execution receipt, correlate it through System Monitor, and feed the bound sample to Automation."
+  }
+}
