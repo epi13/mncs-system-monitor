@@ -71,6 +71,10 @@ pub enum RecordSource {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExecutionRecord {
     pub identity: ExecutionIdentity,
+    /// Forge's exact subject link, retained so downstream owners can bind an observation to
+    /// the compiler work identity that requested it. Other record sources may omit it.
+    pub subject_record_id: Option<String>,
+    pub subject_identity: Option<String>,
     pub repository: Option<String>,
     pub revision: Option<String>,
     pub argv: Vec<String>,
@@ -285,6 +289,8 @@ fn record_from_value(value: &Value) -> Result<ExecutionRecord, IngestError> {
     let host_pid = optional_u64(value, "host_pid")?.and_then(|pid| u32::try_from(pid).ok());
     Ok(ExecutionRecord {
         identity: ExecutionIdentity(identity.to_string()),
+        subject_record_id: None,
+        subject_identity: None,
         repository: optional_string(value, "repository")?,
         revision: optional_string(value, "revision")?,
         argv,
@@ -373,11 +379,39 @@ fn forge_receipt_from_value(value: &Value) -> Result<ExecutionRecord, IngestErro
             found: format!("{FORGE_RECEIPT_TYPE}/{found_version}"),
         });
     }
+    if value
+        .get("subject")
+        .is_some_and(|subject| !subject.is_null() && !subject.is_object())
+    {
+        return Err(IngestError::InvalidValue {
+            field: "subject",
+            detail: "expected an object".to_string(),
+        });
+    }
     let identity = value
         .get("receipt_identity")
         .and_then(Value::as_str)
         .filter(|identity| !identity.is_empty())
         .ok_or(IngestError::MissingField("receipt_identity"))?;
+    let subject_record_id = nested_optional_string(value, "subject", "record_id")?;
+    let subject_identity = nested_optional_string(value, "subject", "canonical_sha256")?;
+    if subject_record_id.is_some() != subject_identity.is_some() {
+        return Err(IngestError::InvalidValue {
+            field: "subject",
+            detail: "record_id and canonical_sha256 must be present together".to_string(),
+        });
+    }
+    if subject_identity.as_deref().is_some_and(|digest| {
+        digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    }) {
+        return Err(IngestError::InvalidValue {
+            field: "subject.canonical_sha256",
+            detail: "expected a lowercase SHA-256 identity".to_string(),
+        });
+    }
     let extension = value
         .get("extensions")
         .and_then(|extensions| extensions.get("forge:local-process"))
@@ -486,6 +520,8 @@ fn forge_receipt_from_value(value: &Value) -> Result<ExecutionRecord, IngestErro
     };
     Ok(ExecutionRecord {
         identity: ExecutionIdentity(identity.to_string()),
+        subject_record_id,
+        subject_identity,
         repository: None,
         revision: None,
         argv: Vec::new(),
@@ -564,6 +600,8 @@ pub fn execution_records_from_test_result(text: &str) -> Result<Vec<ExecutionRec
     };
     Ok(vec![ExecutionRecord {
         identity: ExecutionIdentity(format!("mncs-test:{run_id}")),
+        subject_record_id: None,
+        subject_identity: None,
         repository: None,
         revision: None,
         argv: Vec::new(),
@@ -788,6 +826,24 @@ mod tests {
         )
         .expect_err("process identity requires PID and start marker together");
         assert!(matches!(partial_identity, IngestError::InvalidValue { .. }));
+    }
+
+    #[test]
+    fn rejects_partial_or_malformed_forge_subject_identity() {
+        let partial = execution_records_from_json(
+            r#"{"record_type":"mncs-execution-receipt","schema_version":"0.1-experimental",
+                "receipt_identity":"x","subject":{"record_id":"compiler-task"}}"#,
+        )
+        .expect_err("Forge subject identity is an exact pair");
+        assert!(matches!(partial, IngestError::InvalidValue { .. }));
+
+        let malformed = execution_records_from_json(
+            r#"{"record_type":"mncs-execution-receipt","schema_version":"0.1-experimental",
+                "receipt_identity":"x","subject":{"record_id":"compiler-task",
+                    "canonical_sha256":"BAD"}}"#,
+        )
+        .expect_err("Forge subject digest must be lowercase SHA-256");
+        assert!(matches!(malformed, IngestError::InvalidValue { .. }));
     }
 
     #[test]

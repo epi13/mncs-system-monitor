@@ -133,6 +133,8 @@ pub fn execution_records_value(records: &[ExecutionRecord]) -> Value {
             json!({
                 "execution": record.identity.0,
                 "source": source_name(record.source),
+                "subject_record_id": record.subject_record_id,
+                "subject_identity": record.subject_identity,
                 "status": status_name(record.status),
                 "verification_outcome": outcome_value(&record.outcome),
                 "harness_status": record.harness_status,
@@ -214,7 +216,9 @@ mod tests {
     fn execution_records_keep_measurements_and_unknown_semantics_separate() {
         let records = crate::record::execution_records_from_json(
             r#"{"record_type":"mncs-execution-receipt","schema_version":"0.1-experimental",
-                "receipt_identity":"receipt-1","lifecycle":{"termination_category":"signal"},
+                "receipt_identity":"receipt-1","subject":{"record_id":"compiler-task-42",
+                    "canonical_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+                "lifecycle":{"termination_category":"signal"},
                 "process":{"harness_status":"UNKNOWN","exit_code":null,"signal":9},
                 "extensions":{"forge:local-process":{"termination_error_code":null,
                     "resource_envelope":{"memory_max_bytes":4096,"tasks_max":8},
@@ -228,6 +232,14 @@ mod tests {
         assert_eq!(
             value["records"][0]["harness_status"],
             Value::from("UNKNOWN")
+        );
+        assert_eq!(
+            value["records"][0]["subject_record_id"],
+            Value::from("compiler-task-42")
+        );
+        assert_eq!(
+            value["records"][0]["subject_identity"],
+            Value::from("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         );
         assert_eq!(
             value["records"][0]["termination"]["process_signal"],

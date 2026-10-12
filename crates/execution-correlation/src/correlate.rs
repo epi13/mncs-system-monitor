@@ -428,6 +428,8 @@ mod tests {
     ) -> ExecutionRecord {
         ExecutionRecord {
             identity: ExecutionIdentity(identity.to_string()),
+            subject_record_id: None,
+            subject_identity: None,
             repository: None,
             revision: None,
             argv: Vec::new(),
