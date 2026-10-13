@@ -1,0 +1,68 @@
+{
+  "schema_version": "mncs-system-monitor.protected-forge-receipt-tests/1",
+  "evidence_identity": "ev_system_monitor_protected_forge_receipt_tests_20261013",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-system-monitor",
+  "recorded_at": "2026-10-13T14:10:14Z",
+  "source": {
+    "repository": "mncs-system-monitor",
+    "revision": "9f08a6de8935345462e494569b15b7fe918c13a7",
+    "claim": {
+      "claim_id": "claim:mncs-system-monitor",
+      "identity": "clm_6cdf93adda018908",
+      "version": 2,
+      "scope": "exclusive repository"
+    },
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "sha256": "8303b632361c5249528dcf74fdf4d05c3792d0cb2c61424cd486a578fc474422"
+      },
+      {
+        "path": "crates/execution-correlation/src/record.rs",
+        "sha256": "73c4662e36206a5281946a650f14127b7f6144496d2e3ec4c681e7996adefd87"
+      },
+      {
+        "path": "crates/monitor-cli/src/environment_input.rs",
+        "sha256": "e9f06c104ab35d50fa4849c3c3743a0e18b5d9cf9c8745e2bd1d104c9a0594c8"
+      },
+      {
+        "path": "crates/monitor-cli/tests/correlation_smoke.rs",
+        "sha256": "6367457e7561d24447b4ba5d214876d484b2d8e994c51da0169705a786f85a71"
+      }
+    ]
+  },
+  "execution": {
+    "job_id": "term-9420682ffc71ad8397c59145",
+    "command": "CARGO_NET_OFFLINE=true cargo test -p mncs-execution-correlation -p mncs-system-monitor",
+    "sandbox_backend": "bwrap",
+    "scope": "project",
+    "project": "mncs-system-monitor",
+    "network": false,
+    "completed_at": "2026-10-13T14:10:14Z",
+    "exit_code": 0,
+    "fixture_backed_contract_tests": true,
+    "real_forge_execution_performed": false
+  },
+  "results": {
+    "mncs-execution-correlation_unit_tests": {
+      "passed": 21,
+      "failed": 0
+    },
+    "mncs-system-monitor_correlation_smoke_tests": {
+      "passed": 9,
+      "failed": 0,
+      "coverage": [
+        "Forge receipt identity and operational facts are ingested without promoting harness status to compiler verification",
+        "Environment-authorized receipt bytes retain immutable source provenance in the resource sample",
+        "forged binding, capability, digest, writable file, symlink, and traversal inputs are rejected",
+        "minimized resource sample publication succeeds for an admitted fixture"
+      ]
+    }
+  },
+  "readiness": {
+    "status": "contract-tests-pass",
+    "reason": "The protected System Monitor ingestion boundary accepts a verified Environment-bound receipt and preserves operational measurements separately from verification outcome. This does not prove a real Forge run, Control forwarding, canonical measurement persistence, or a subsequent Automation scheduling decision."
+  }
+}
