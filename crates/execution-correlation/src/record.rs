@@ -335,8 +335,8 @@ fn parse_resource_observations(
     Ok(parsed)
 }
 
-fn nested_optional_string<'a>(
-    value: &'a Value,
+fn nested_optional_string(
+    value: &Value,
     parent: &'static str,
     field: &'static str,
 ) -> Result<Option<String>, IngestError> {

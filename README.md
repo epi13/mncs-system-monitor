@@ -118,6 +118,17 @@ per-invocation artifact directory; the monitor writes the sample to
 `system-resource-sample.json` there, and Environment publishes it as an immutable Store artifact.
 Direct `--json` CLI use remains stdout-only and retains the full observability projection.
 
+When Environment supplies a Store-backed provider input, the resource-sample capability accepts
+one artifact named `forge-receipt` from `mncs-forge:provider-artifact-execution`. The monitor checks
+the bounded manifest fields, exact source capability, binding identifier, read-only file, byte
+count, and SHA-256 before ingesting the receipt. Environment remains responsible for admitting the
+binding and matching the Store reference to canonical bytes. The resulting `execution_receipt_input`
+section retains that source provenance beside `execution_records`; malformed or mismatched inputs
+fail before a sample artifact is published. No caller-selected filesystem path is used for this
+input. This Monitor-side support is not yet reachable through the current Control binding, which
+does not forward provider inputs; the repository fixtures validate the bounded transport only.
+They are not evidence of a real Forge execution or end-to-end canonical publication.
+
 ## Canonical execution correlation
 
 Host telemetry alone cannot tell a Forge execution from a stray process. `--executions FILE`

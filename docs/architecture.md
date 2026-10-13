@@ -86,6 +86,14 @@ re-implements their decisions:
 - **Store** owns the persistent substrate. The monitor keeps no operational database: history
   is bounded and in-memory, and execution history lives in the owning subsystem's record
   store. Retained records are passed in by the caller (`--executions`, `--reconcile`).
+- For the Environment `system-resource-sample` capability, one optional `forge-receipt` provider
+  input may carry a Store-backed artifact from `mncs-forge:provider-artifact-execution`. Environment
+  admits the binding and resolves its canonical Store bytes; the monitor checks the bounded
+  manifest and private-file digest, ingests only a valid Forge receipt, and retains the input's
+  session, binding, Store reference, and digest in the sample. Missing input yields a host-only
+  sample; malformed input fails closed. This Monitor-side transport is not yet reachable through
+  the current Control binding, which does not forward provider inputs; local fixtures do not prove
+  a real Forge execution or end-to-end canonical publication.
 - **Commons** owns typed project relationships and evidence coordination. Record fields
   (`repository`, `revision`, `verification_identity`) are opaque strings carried through,
   never parsed or re-derived by the monitor.

@@ -13,6 +13,8 @@ use mncs_machine_projection::StructuredProjection;
 use mncs_monitor_core::{Process, ProcessIdentity, ProcessState, Sampler, SystemSnapshot};
 use mncs_tui_host::{Cell, Color, Event, Frame, Key, Size, Style, TerminalSession};
 
+mod environment_input;
+
 const DEFAULT_INTERVAL_MS: u64 = 1_000;
 const DEFAULT_HISTORY: usize = 120;
 const TEST_RESULT_SCHEMA_VERSION: &str = "mncs.test-result/1";
@@ -229,9 +231,19 @@ fn run_resource_sample(config: Config) -> Result<(), Box<dyn std::error::Error>>
     if !config.watch_executables.is_empty() {
         return Err("resource samples do not accept watched executable names".into());
     }
-    let records = match config.executions.as_deref() {
-        Some(path) => load_execution_records(path)?,
-        None => Vec::new(),
+    let environment_input = environment_input::read_forge_receipt()?;
+    let records = match (config.executions.as_deref(), environment_input.as_ref()) {
+        (Some(_), Some(_)) => {
+            return Err(
+                "resource sample cannot combine a path input and Environment receipt".into(),
+            );
+        }
+        (Some(path), None) => load_execution_records(path)?,
+        (None, Some(input)) => {
+            let text = std::str::from_utf8(&input.content)?;
+            execution_records_from_json(text)?
+        }
+        (None, None) => Vec::new(),
     };
     if records.len() > 1 {
         return Err("resource samples accept at most one Forge receipt".into());
@@ -246,11 +258,13 @@ fn run_resource_sample(config: Config) -> Result<(), Box<dyn std::error::Error>>
     let mut collector = PlatformCollector::new();
     let mut sampler = Sampler::new(1);
     let snapshot = sampler.accept(collector.collect()?).snapshot;
-    let sections = if config.executions.is_some() {
-        vec![("execution_records", execution_records_value(&records))]
-    } else {
-        Vec::new()
-    };
+    let mut sections = Vec::new();
+    if !records.is_empty() {
+        sections.push(("execution_records", execution_records_value(&records)));
+    }
+    if let Some(input) = environment_input {
+        sections.push(("execution_receipt_input", input.provenance));
+    }
     let json = StructuredProjection.resource_sample_json(&snapshot, &sections)?;
     save_environment_artifact(&json, RESOURCE_SAMPLE_ARTIFACT)?;
     println!("{json}");
