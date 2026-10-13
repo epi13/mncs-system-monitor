@@ -1,7 +1,7 @@
 {
   "schema_version": "mncs-family.repository-manifest/v0alpha1",
   "repository": "mncs-system-monitor",
-  "revision": 2,
+  "revision": 3,
   "manifest_location": "in-repository",
   "authority": {"note": "System-monitor owns its domain vocabulary (processes, identity, resource samples, relationships, pressure signals, sampling policy, monitor uncertainty) plus human and machine projections of live host state. The host adapter owns OS interaction; mncs-tui owns terminal semantics (consumed as mncs-tui-host at git rev 0c6454c); mncs-language owns language/type/effect/identity/verification semantics. Live telemetry is observed at runtime, never committed as project truth."},
   "contracts": {
@@ -11,7 +11,13 @@
         "version": "0.1.0",
         "kind": "observability-surface",
         "stability": "experimental",
-        "fingerprint_sources": ["crates/"]
+        "effects": ["read"],
+        "fingerprint_sources": ["crates/"],
+        "invocation": {
+          "kind": "executable",
+          "path": "target/debug/mncs-system-monitor",
+          "fixed_argv": ["--json", "--once", "--no-tui"]
+        }
       },
       {
         "contract": "system-resource-sample",

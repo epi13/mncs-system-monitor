@@ -55,6 +55,45 @@ fn monitor_bin() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_mncs-system-monitor"))
 }
 
+#[test]
+fn declared_system_observability_invocation_is_read_only_json_snapshot() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let manifest: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.join(".mncs/project.json")).expect("project manifest"),
+    )
+    .expect("valid project manifest");
+    let contract = manifest["contracts"]["provides"]
+        .as_array()
+        .expect("provided contracts")
+        .iter()
+        .find(|entry| entry["contract"] == "system-observability")
+        .expect("system-observability contract");
+    assert_eq!(contract["effects"], serde_json::json!(["read"]));
+    let invocation = &contract["invocation"];
+    assert_eq!(invocation["kind"], "executable");
+    assert_eq!(invocation["path"], "target/debug/mncs-system-monitor");
+    let argv = invocation["fixed_argv"]
+        .as_array()
+        .expect("fixed invocation arguments")
+        .iter()
+        .map(|argument| argument.as_str().expect("string argument"))
+        .collect::<Vec<_>>();
+    assert_eq!(argv, ["--json", "--once", "--no-tui"]);
+
+    let output = Command::new(monitor_bin())
+        .args(argv)
+        .output()
+        .expect("system observability invocation runs");
+    assert!(
+        output.status.success(),
+        "read-only snapshot succeeds: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("snapshot JSON");
+    assert_eq!(snapshot["schema"], "mncs.system-monitor.snapshot.v1");
+}
+
 fn private_artifact_dir(name: &str) -> std::path::PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!(
