@@ -1,0 +1,143 @@
+{
+  "schema_version": "mncs-system-monitor.provider-input-transport-evidence/1",
+  "evidence_identity": "ev_system_monitor_provider_input_transport_20261013",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-system-monitor",
+  "recorded_at": "2026-10-13T11:52:33Z",
+  "source": {
+    "repository": "mncs-system-monitor",
+    "base_revision": "038d5b05c329d054cf31b62715512aa67ffe3e2a",
+    "implementation_revision": "88748cfb3f4b99c9f4476c7aab8c75a7c7c0c806",
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "sha256": "8303b632361c5249528dcf74fdf4d05c3792d0cb2c61424cd486a578fc474422"
+      },
+      {
+        "path": "README.md",
+        "sha256": "44c0566e44c3af63cd20c7bc6f53c27ee4157b75f24e8ec6aae10924948c4915"
+      },
+      {
+        "path": "crates/execution-correlation/src/record.rs",
+        "sha256": "73c4662e36206a5281946a650f14127b7f6144496d2e3ec4c681e7996adefd87"
+      },
+      {
+        "path": "crates/monitor-cli/Cargo.toml",
+        "sha256": "bebd2f0f5474d5db40832c4ed53e073760807e1e717c6fcc929798dcf0bff498"
+      },
+      {
+        "path": "crates/monitor-cli/src/environment_input.rs",
+        "sha256": "e9f06c104ab35d50fa4849c3c3743a0e18b5d9cf9c8745e2bd1d104c9a0594c8"
+      },
+      {
+        "path": "crates/monitor-cli/src/main.rs",
+        "sha256": "2ca79721c70796283029282c2c07057edd1880e6c8fa7013d3cc0cfa62afd084"
+      },
+      {
+        "path": "crates/monitor-cli/tests/correlation_smoke.rs",
+        "sha256": "6367457e7561d24447b4ba5d214876d484b2d8e994c51da0169705a786f85a71"
+      },
+      {
+        "path": "docs/architecture.md",
+        "sha256": "7fc11d0e5a4f0acec0c5115439ef1534573dd43a939b11bdd1690e5b57f0e1d7"
+      }
+    ],
+    "tested_executable": {
+      "path": "target/debug/mncs-system-monitor",
+      "sha256": "a61e0ea0743434b0b6da72fa252d6482c7b1eaad990fbef2a2e58228bc90756e"
+    }
+  },
+  "change": {
+    "capability": "mncs-system-monitor:system-resource-sample",
+    "input_schema": "mncs.environment.provider-input-artifacts/1",
+    "accepted_input": {
+      "name": "forge-receipt",
+      "source_capability": "mncs-forge:provider-artifact-execution",
+      "maximum_count": 1,
+      "maximum_bytes": 1048576
+    },
+    "validation": [
+      "exact manifest and artifact field sets",
+      "session, binding, Store reference, and source-path shape",
+      "absolute bundle root and safe relative local path",
+      "directory-relative O_NOFOLLOW opens for every Unix path component",
+      "read-only regular file and exact bounded size",
+      "stable file identity across read and SHA-256 equality"
+    ],
+    "authority_boundary": "Environment admits the source binding and resolves canonical Store bytes; Monitor verifies and records the bounded transport provenance but does not authorize Store publication",
+    "sample_provenance_fields": [
+      "environment_session_id",
+      "name",
+      "capability",
+      "binding_id",
+      "store_reference",
+      "path",
+      "byte_count",
+      "sha256"
+    ]
+  },
+  "validation": {
+    "sandbox": {
+      "backend": "bwrap",
+      "scope": "project",
+      "project": "mncs-system-monitor",
+      "network": false
+    },
+    "cargo_test_workspace": {
+      "status": "pass",
+      "passed": 48,
+      "failed": 0,
+      "receipt_tests": [
+        "valid named input and retained provenance",
+        "wrong source capability rejected",
+        "digest mismatch rejected",
+        "writable input rejected",
+        "file symlink rejected",
+        "directory symlink rejected",
+        "path traversal rejected",
+        "rejected input creates no sample artifact"
+      ]
+    },
+    "cargo_fmt_check": "pass",
+    "cargo_clippy": {
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "status": "pass"
+    },
+    "cargo_check": {
+      "command": "cargo check --workspace --all-targets",
+      "status": "pass"
+    },
+    "cli_envelope": {
+      "command": "cargo run -p mncs-system-monitor -- --json --once",
+      "status": "pass",
+      "schema": "mncs.system-monitor.snapshot.v1",
+      "host_object_present": true,
+      "history_array_present": true
+    },
+    "git_diff_check": "pass"
+  },
+  "integration": {
+    "control_binding_forwards_provider_input": false,
+    "real_environment_provider_input_invocation": false,
+    "real_forge_receipt_used": false,
+    "canonical_store_artifact_created": false,
+    "reason": "Control's current Monitor binding does not forward provider inputs. The protected repository tests use synthetic fixtures and prove only the Monitor-side transport validator."
+  },
+  "readiness": {
+    "status": "partial",
+    "real_compiler_execution": false,
+    "automation_scheduling_decision": false,
+    "store_resource_feedback_loop": "not proven",
+    "next": "Integrate Environment-authorized receipt forwarding through the approved Control boundary, then use a real Forge execution after its owner issues a handoff and prove the correlated sample influences a subsequent Automation decision."
+  },
+  "active_claim": {
+    "claim_id": "claim:mncs-system-monitor",
+    "identity": "clm_6cdf93adda018908",
+    "session_id": "ses_7226fbcfe65820f7",
+    "version": 2,
+    "status": "held",
+    "live": true,
+    "expires_at": "2026-10-14T05:17:50+00:00"
+  }
+}
