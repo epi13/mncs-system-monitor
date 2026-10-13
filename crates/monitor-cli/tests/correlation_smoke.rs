@@ -56,7 +56,7 @@ fn monitor_bin() -> std::path::PathBuf {
 }
 
 #[test]
-fn declared_system_observability_invocation_is_read_only_json_snapshot() {
+fn declared_system_observability_invocation_returns_bounded_artifact() {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let manifest: serde_json::Value = serde_json::from_slice(
         &std::fs::read(root.join(".mncs/project.json")).expect("project manifest"),
@@ -69,6 +69,14 @@ fn declared_system_observability_invocation_is_read_only_json_snapshot() {
         .find(|entry| entry["contract"] == "system-observability")
         .expect("system-observability contract");
     assert_eq!(contract["effects"], serde_json::json!(["read"]));
+    assert_eq!(
+        contract["artifact_contract"],
+        serde_json::json!({
+            "artifact_schema": "mncs.system-monitor.observability-summary.v1",
+            "artifact_file": "system-observability-summary.json",
+            "publication_owner": "mncs-environment"
+        })
+    );
     let invocation = &contract["invocation"];
     assert_eq!(invocation["kind"], "executable");
     assert_eq!(invocation["path"], "target/debug/mncs-system-monitor");
@@ -78,20 +86,43 @@ fn declared_system_observability_invocation_is_read_only_json_snapshot() {
         .iter()
         .map(|argument| argument.as_str().expect("string argument"))
         .collect::<Vec<_>>();
-    assert_eq!(argv, ["--json", "--once", "--no-tui"]);
+    assert_eq!(
+        argv,
+        ["--json", "--once", "--no-tui", "--observability-summary"]
+    );
 
+    let artifact_dir = private_artifact_dir("observability-summary");
     let output = Command::new(monitor_bin())
         .args(argv)
+        .env("MNCS_ENV_SESSION_ARTIFACT_DIR", &artifact_dir)
         .output()
         .expect("system observability invocation runs");
     assert!(
         output.status.success(),
-        "read-only snapshot succeeds: {}",
+        "read-only observation succeeds: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let snapshot: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("snapshot JSON");
-    assert_eq!(snapshot["schema"], "mncs.system-monitor.snapshot.v1");
+    assert!(
+        output.stdout.len() <= 16 * 1024,
+        "RPC output remains bounded"
+    );
+    let artifact = std::fs::read(artifact_dir.join("system-observability-summary.json"))
+        .expect("Environment observability artifact");
+    assert_eq!(
+        artifact, output.stdout,
+        "retained bytes match provider output"
+    );
+    let summary: serde_json::Value = serde_json::from_slice(&artifact).expect("summary JSON");
+    assert_eq!(
+        summary["schema"],
+        "mncs.system-monitor.observability-summary.v1"
+    );
+    assert!(summary["sampled_process_count"].is_number());
+    assert!(summary["pressure"].is_array());
+    assert!(summary.get("hostname").is_none());
+    assert!(summary.get("processes").is_none());
+    assert!(!String::from_utf8_lossy(&artifact).contains("command_line"));
+    std::fs::remove_dir_all(&artifact_dir).ok();
 }
 
 fn private_artifact_dir(name: &str) -> std::path::PathBuf {

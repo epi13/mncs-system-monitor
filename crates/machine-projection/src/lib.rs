@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 
 pub const SNAPSHOT_SCHEMA: &str = "mncs.system-monitor.snapshot.v1";
 pub const RESOURCE_SAMPLE_SCHEMA: &str = "mncs.system-monitor.resource-sample.v1";
+pub const OBSERVABILITY_SUMMARY_SCHEMA: &str = "mncs.system-monitor.observability-summary.v1";
 
 /// A machine-facing envelope that preserves the monitor model and its uncertainty.
 #[derive(Debug)]
@@ -112,34 +113,73 @@ impl StructuredProjection {
         snapshot: &SystemSnapshot,
         sections: &[(&str, Value)],
     ) -> Result<String, serde_json::Error> {
-        let mut value = json!({
-            "schema": RESOURCE_SAMPLE_SCHEMA,
-            "observed_at": snapshot.observed_at
-                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|time| time.as_millis() as u64),
-            "sample_time": snapshot.sample_time.map(time_value),
-            "host": {
-                "cpu_count": snapshot.cpu_count,
-                "cpu_utilization": snapshot.host_cpu.as_ref()
-                    .and_then(|cpu| cpu.utilization),
-                "cpu_status": snapshot.host_cpu.as_ref()
-                    .map(|cpu| status_label(cpu.status)).unwrap_or("unknown"),
-                "load_average": snapshot.load_average,
-                "memory_total_bytes": snapshot.memory_total_bytes,
-                "memory_available_bytes": snapshot.memory_available_bytes,
-                "memory_available_status": if snapshot.memory_available_bytes.is_some() {
-                    "observed"
-                } else {
-                    "unknown"
-                },
-            },
-        });
-        if let Value::Object(ref mut map) = value {
-            for (name, section) in sections {
-                map.insert((*name).to_string(), section.clone());
-            }
-        }
+        let mut value = host_metrics_value(snapshot, RESOURCE_SAMPLE_SCHEMA);
+        merge_sections(&mut value, sections);
         serde_json::to_string_pretty(&value)
+    }
+
+    /// Emit a bounded host observation that is suitable for Environment RPC
+    /// responses and immutable invocation artifacts. It keeps aggregate process
+    /// and pressure facts while excluding process identities and command data.
+    pub fn observability_summary_json(
+        &self,
+        snapshot: &SystemSnapshot,
+    ) -> Result<String, serde_json::Error> {
+        let mut value = host_metrics_value(snapshot, OBSERVABILITY_SUMMARY_SCHEMA);
+        value["sampled_process_count"] = json!(snapshot.process_count());
+        value["pressure"] = json!(snapshot
+            .pressure
+            .iter()
+            .take(32)
+            .map(|pressure| {
+                json!({
+                    "kind": format!("{:?}", pressure.kind).to_lowercase(),
+                    "level": format!("{:?}", pressure.level).to_lowercase(),
+                    "some_avg10": pressure.some_avg10,
+                    "some_avg60": pressure.some_avg60,
+                    "some_avg300": pressure.some_avg300,
+                    "full_avg10": pressure.full_avg10,
+                    "full_avg60": pressure.full_avg60,
+                    "full_avg300": pressure.full_avg300,
+                    "status": status_label(pressure.status),
+                    "source": source_label(pressure.source),
+                })
+            })
+            .collect::<Vec<_>>());
+        serde_json::to_string_pretty(&value)
+    }
+}
+
+fn host_metrics_value(snapshot: &SystemSnapshot, schema: &str) -> Value {
+    json!({
+        "schema": schema,
+        "observed_at": snapshot.observed_at
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|time| time.as_millis() as u64),
+        "sample_time": snapshot.sample_time.map(time_value),
+        "host": {
+            "cpu_count": snapshot.cpu_count,
+            "cpu_utilization": snapshot.host_cpu.as_ref()
+                .and_then(|cpu| cpu.utilization),
+            "cpu_status": snapshot.host_cpu.as_ref()
+                .map(|cpu| status_label(cpu.status)).unwrap_or("unknown"),
+            "load_average": snapshot.load_average,
+            "memory_total_bytes": snapshot.memory_total_bytes,
+            "memory_available_bytes": snapshot.memory_available_bytes,
+            "memory_available_status": if snapshot.memory_available_bytes.is_some() {
+                "observed"
+            } else {
+                "unknown"
+            },
+        },
+    })
+}
+
+fn merge_sections(value: &mut Value, sections: &[(&str, Value)]) {
+    if let Value::Object(ref mut map) = value {
+        for (name, section) in sections {
+            map.insert((*name).to_string(), section.clone());
+        }
     }
 }
 

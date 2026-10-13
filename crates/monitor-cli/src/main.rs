@@ -20,6 +20,7 @@ const DEFAULT_HISTORY: usize = 120;
 const TEST_RESULT_SCHEMA_VERSION: &str = "mncs.test-result/1";
 const ENVIRONMENT_ARTIFACT_DIR: &str = "MNCS_ENV_SESSION_ARTIFACT_DIR";
 const RESOURCE_SAMPLE_ARTIFACT: &str = "system-resource-sample.json";
+const OBSERVABILITY_SUMMARY_ARTIFACT: &str = "system-observability-summary.json";
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -29,6 +30,7 @@ struct Config {
     once: bool,
     no_tui: bool,
     resource_sample: bool,
+    observability_summary: bool,
     executions: Option<String>,
     watch_executables: Vec<String>,
     reconcile: Option<String>,
@@ -43,6 +45,7 @@ impl Default for Config {
             once: false,
             no_tui: false,
             resource_sample: false,
+            observability_summary: false,
             executions: None,
             watch_executables: Vec::new(),
             reconcile: None,
@@ -62,6 +65,8 @@ fn main() {
         run_reconcile(config)
     } else if config.resource_sample {
         run_resource_sample(config)
+    } else if config.observability_summary {
+        run_observability_summary()
     } else if config.json {
         run_machine(config)
     } else {
@@ -85,6 +90,7 @@ where
             "--once" => config.once = true,
             "--no-tui" => config.no_tui = true,
             "--resource-sample" => config.resource_sample = true,
+            "--observability-summary" => config.observability_summary = true,
             "--interval-ms" => {
                 let value = args
                     .next()
@@ -142,15 +148,31 @@ where
     if config.resource_sample && config.reconcile.is_some() {
         return Err("--resource-sample cannot be combined with --reconcile".into());
     }
+    if config.observability_summary
+        && (!config.json
+            || !config.once
+            || !config.no_tui
+            || config.resource_sample
+            || config.reconcile.is_some()
+            || config.executions.is_some()
+            || !config.watch_executables.is_empty())
+    {
+        return Err(
+            "--observability-summary requires --json --once --no-tui and cannot be correlated"
+                .into(),
+        );
+    }
     Ok(config)
 }
 
 fn usage() -> &'static str {
-    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--resource-sample]\n                         [--interval-ms N] [--history N]\n                         [--executions FILE] [--watch-exe NAME]... [--reconcile FILE]\n\n\
+    "Usage: mncs-system-monitor [--json] [--once] [--no-tui] [--resource-sample]\n                         [--observability-summary] [--interval-ms N] [--history N]\n                         [--executions FILE] [--watch-exe NAME]... [--reconcile FILE]\n\n\
 Default mode is an interactive TUI when stdout is a terminal and a concise snapshot otherwise.\n\
 --json emits the semantic snapshot envelope, including evidence status and bounded history.\n\
 --resource-sample emits aggregate host metrics and at most one Forge receipt; Environment\n\
 stores this privacy-minimized projection as an immutable invocation artifact.\n\
+--observability-summary emits a bounded host, process-count, and pressure projection; Environment\n\
+stores it as an immutable invocation artifact.\n\
 --executions correlates the snapshot against ingested canonical execution records (the\n\
 monitor's own record envelope, an experimental Forge receipt, or a mncs.test-result/1 envelope)\n\
 and merges `correlation` plus an `execution_records` section into --json output.\n\
@@ -271,7 +293,16 @@ fn run_resource_sample(config: Config) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-/// Save the exact resource projection into Environment's private invocation
+fn run_observability_summary() -> Result<(), Box<dyn std::error::Error>> {
+    let mut collector = PlatformCollector::new();
+    let snapshot = Sampler::new(1).accept(collector.collect()?).snapshot;
+    let json = StructuredProjection.observability_summary_json(&snapshot)?;
+    save_environment_artifact(&json, OBSERVABILITY_SUMMARY_ARTIFACT)?;
+    println!("{json}");
+    Ok(())
+}
+
+/// Save the exact projection into Environment's private invocation
 /// workspace when this provider is called through Environment. Environment
 /// owns and later publishes the directory as an immutable Store artifact.
 /// Direct CLI use without that contract remains stdout-only.
